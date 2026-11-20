@@ -1,0 +1,55 @@
+/* input.css — sumber CSS Tailwind. Hasil build: css/app.css (jalankan python scripts/build.py css / watch).
+   Kelas komponen di bawah dipakai di HTML dan di template js/*.js. Ubah tampilan tombol, kolom, balasan, dan kartu di sini. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components{
+  /* tombol, kolom input, tab */
+  .btn{@apply cursor-pointer transition-colors rounded-lg border border-bd bg-sf px-3 py-1.5 text-center hover:border-ac focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
+  /* tombol bar atas (tinggi seragam) */
+  .hbtn{@apply flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-bd bg-sf px-2.5 transition-colors hover:border-ac focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
+  .btn-pri{@apply border-ac bg-ac font-semibold text-on}
+  .field{@apply min-w-0 transition-colors rounded-lg border border-bd bg-sf px-2.5 py-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
+  .tab{@apply cursor-pointer transition-colors rounded-lg border border-transparent px-3 py-1.5 text-mu focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
+  .tab-on{@apply border-bd bg-sf font-semibold text-tx shadow-sm}
+  /* gelembung pesan: .msg dasar, .msg-u pesan pengguna, .msg-e error */
+  .msg{@apply max-w-full whitespace-pre-wrap break-words rounded-xl border border-bd bg-sf px-3 py-2.5}
+  .msg-u{@apply max-w-[85%] self-end bg-cd}
+  .msg-e{@apply text-er}
+  .msg pre{@apply my-1.5 overflow-auto rounded-lg bg-cd p-2.5}
+  .msg code{@apply font-mono text-[13px]}
+  .msg h4{@apply mb-0.5 mt-2 font-semibold}
+  .msg img,.msg video{@apply mb-1.5 block max-w-full rounded-lg}
+  .msg a{@apply text-ac underline}
+  /* tombol ikon di bar aksi balasan */
+  .ibtn{@apply cursor-pointer rounded-md p-1.5 text-mu transition-colors hover:bg-cd hover:text-tx focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
+  /* tombol pilih file (input file asli disembunyikan dengan sr-only) */
+  .filebtn{@apply inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-bd bg-sf px-3 py-1.5 text-tx transition-colors hover:border-ac hover:text-ac focus-within:outline focus-within:outline-2 focus-within:outline-ac}
+  /* homepage */
+  .card{@apply rounded-xl border border-bd bg-sf p-4}
+  .chip{@apply rounded-full border border-bd bg-sf px-3 py-1 text-sm}
+}
+
+/* ===== ANIMASI STREAMING (di luar layer agar bebas dari purge) =====
+   Matikan semua animasi dengan menghapus blok ini, atau biarkan: otomatis nonaktif bila OS meminta "kurangi gerakan". */
+@keyframes rise{from{opacity:0;transform:translateY(6px)}}
+@keyframes caret{50%{opacity:0}}
+@keyframes dot{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:.9;transform:scale(1)}}
+.msg{animation:rise .18s ease-out}
+.streaming::after{content:"";display:inline-block;width:.45em;height:1em;margin-left:2px;vertical-align:-.15em;background:currentColor;opacity:.6;animation:caret 1s steps(2) infinite}
+.dots{display:inline-flex;gap:4px;align-items:center;height:1.2em}
+.dots i{width:6px;height:6px;border-radius:50%;background:currentColor;animation:dot 1.2s ease-in-out infinite}
+.dots i:nth-child(2){animation-delay:.15s}
+.dots i:nth-child(3){animation-delay:.3s}
+@media(prefers-reduced-motion:reduce){.msg,.streaming::after,.dots i{animation:none}}
+
+/* ===== BLOK KODE (hasil md() di js/config.js) ===== */
+.codeblock{margin:.5rem 0;overflow:hidden;border:1px solid var(--bd);border-radius:.5rem;background:var(--cd);text-align:left}
+.cb-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;border-bottom:1px solid var(--bd);padding:.2rem .75rem;font-size:.75rem;color:var(--mu)}
+.cb-acts{display:flex;gap:.25rem}
+.cb-acts button{cursor:pointer;border-radius:.25rem;padding:.1rem .5rem}
+.cb-acts button:hover{background:var(--bg);color:var(--tx)}
+.msg .codeblock pre{margin:0;border-radius:0;background:transparent;padding:.75rem;white-space:pre;overflow:auto}
+.codeblock i{font-style:normal}
+.tk-c{font-style:italic!important;color:var(--mu)}.tk-k{color:var(--tk-k)}.tk-s{color:var(--tk-s)}.tk-n{color:var(--tk-n)}
