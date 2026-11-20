@@ -1,3 +1,0 @@
-/* style.css — TOKEN WARNA tema (terang dan gelap). Ubah palet di sini; dipetakan ke nama warna Tailwind di tailwind.config.js */
-:root{--bg:#eceff3;--sf:#fff;--tx:#141a22;--mu:#5f6b7a;--bd:#d5dbe3;--ac:#3f4fd8;--on:#fff;--cd:#e4e8ee;--er:#b42318;--tk-k:#6d28d9;--tk-s:#0f766e;--tk-n:#b45309}
-@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--sf:#161c25;--tx:#e6ebf2;--mu:#8b97a8;--bd:#273040;--ac:#8ea2ff;--on:#0b1020;--cd:#202938;--er:#ff8a80;--tk-k:#c4b5fd;--tk-s:#5eead4;--tk-n:#fcd34d}}

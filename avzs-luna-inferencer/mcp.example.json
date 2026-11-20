@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "demo": { "command": "python", "args": ["scripts/mcp_demo.py"] },
-    "waktu": { "command": "uvx", "args": ["mcp-server-time"] },
-    "fetch": { "command": "uvx", "args": ["mcp-server-fetch"] },
-    "berkas": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/folder/yang/diizinkan"] },
-    "remote": { "url": "https://contoh.com/mcp", "headers": { "Authorization": "Bearer TOKEN_ANDA" } }
-  }
-}

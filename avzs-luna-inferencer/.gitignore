@@ -1,6 +1,0 @@
-__pycache__/
-*.pyc
-.env
-js/env.js
-data/
-mcp.json

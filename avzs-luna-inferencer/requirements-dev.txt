@@ -1,2 +1,0 @@
-# Hanya untuk membangun CSS (server.py tidak butuh paket apa pun)
-pytailwindcss>=0.4
