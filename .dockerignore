@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+data/
+js/env.js
+mcp.json
+avzs-luna-inferencer/
+__pycache__/
+*.pyc
+dist/
+.venv/
+venv/
+node_modules/

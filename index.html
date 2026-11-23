@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -9,43 +9,43 @@
 </head>
 <body class="min-h-dvh bg-bg font-sans text-[15px] leading-relaxed text-tx">
 <div class="mx-auto max-w-4xl px-4 pb-10">
-  <!-- Bar atas -->
+  <!-- Top bar -->
   <header class="flex items-center justify-between py-4">
     <div class="flex items-center gap-2.5"><img data-brand="logo" alt="" class="h-8 w-8"><b data-brand="name" class="text-lg tracking-tight"></b></div>
-    <div class="flex gap-2"><a href="models.html" class="btn">Model lokal</a><a href="app.html" class="btn btn-pri">Buka aplikasi</a></div>
+    <div class="flex gap-2"><a href="models.html" class="btn">Local models</a><a href="app.html" class="btn btn-pri">Open app</a></div>
   </header>
-  <!-- Hero: teks diambil dari js/brand.js -->
+  <!-- Hero: text comes from js/brand.js -->
   <section class="py-16 text-center">
     <img data-brand="logo" alt="" class="mx-auto mb-5 h-20 w-20">
     <h1 data-brand="name" class="text-4xl font-semibold tracking-tight sm:text-5xl"></h1>
     <p data-brand="tagline" class="mx-auto mt-4 max-w-xl text-mu"></p>
-    <a href="app.html" class="btn btn-pri mt-7 inline-block px-5 py-2.5">Mulai sekarang</a>
+    <a href="app.html" class="btn btn-pri mt-7 inline-block px-5 py-2.5">Get started</a>
   </section>
-  <!-- Fitur: salin satu div.card untuk menambah kartu -->
+  <!-- Features: copy one div.card to add a card -->
   <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-    <div class="card"><h3 class="font-semibold">Chat</h3><p class="mt-1 text-sm text-mu">Percakapan streaming dengan model cloud maupun lokal, lengkap dengan system prompt.</p></div>
-    <div class="card"><h3 class="font-semibold">Coder</h3><p class="mt-1 text-sm text-mu">Asisten pemrograman: tulis, jelaskan, debug, refactor, dan review kode, dengan blok kode yang bisa disalin dan dipratinjau.</p></div>
-    <div class="card"><h3 class="font-semibold">Multimodal</h3><p class="mt-1 text-sm text-mu">Lampirkan gambar dan tanyakan isinya ke model vision.</p></div>
-    <div class="card"><h3 class="font-semibold">Riset</h3><p class="mt-1 text-sm text-mu">Pecah topik menjadi sub-pertanyaan, teliti satu per satu, lalu susun laporan. Web search opsional.</p></div>
-    <div class="card"><h3 class="font-semibold">Gambar</h3><p class="mt-1 text-sm text-mu">Buat gambar lewat OpenAI, Gemini, xAI, Together, atau Stable Diffusion lokal.</p></div>
-    <div class="card"><h3 class="font-semibold">Video</h3><p class="mt-1 text-sm text-mu">Buat video dengan Sora atau Veo, lengkap dengan pemantauan status.</p></div>
-    <div class="card"><h3 class="font-semibold">Model lokal</h3><p class="mt-1 text-sm text-mu">Lihat spesifikasi PC, dapatkan rekomendasi model yang cocok, dan cari model Hugging Face dari sini.</p><a href="models.html" class="mt-2 inline-block text-sm text-ac hover:underline">Buka Model Lokal</a></div>
-    <div class="card"><h3 class="font-semibold">Cloud dan lokal</h3><p class="mt-1 text-sm text-mu">Kunci API di browser atau file .env. Model lokal lewat Ollama, LM Studio, llama.cpp, dan lainnya.</p></div>
+    <div class="card"><h3 class="font-semibold">Chat</h3><p class="mt-1 text-sm text-mu">Streaming conversations with cloud or local models, complete with a system prompt.</p></div>
+    <div class="card"><h3 class="font-semibold">Coder</h3><p class="mt-1 text-sm text-mu">A programming assistant: write, explain, debug, refactor, and review code, with copyable and previewable code blocks.</p></div>
+    <div class="card"><h3 class="font-semibold">Multimodal</h3><p class="mt-1 text-sm text-mu">Attach images and ask vision models about their contents.</p></div>
+    <div class="card"><h3 class="font-semibold">Research</h3><p class="mt-1 text-sm text-mu">Break a topic into sub-questions, investigate them one by one, then compile a report. Optional web search.</p></div>
+    <div class="card"><h3 class="font-semibold">Image</h3><p class="mt-1 text-sm text-mu">Generate images with OpenAI, Gemini, xAI, Together, or local Stable Diffusion.</p></div>
+    <div class="card"><h3 class="font-semibold">Video</h3><p class="mt-1 text-sm text-mu">Generate videos with Sora or Veo, including status monitoring.</p></div>
+    <div class="card"><h3 class="font-semibold">Local models</h3><p class="mt-1 text-sm text-mu">View your PC specifications, get recommendations for models that fit, and search Hugging Face from here.</p><a href="models.html" class="mt-2 inline-block text-sm text-ac hover:underline">Open Local Models</a></div>
+    <div class="card"><h3 class="font-semibold">Cloud and local</h3><p class="mt-1 text-sm text-mu">API keys in the browser or a .env file. Local models through Ollama, LM Studio, llama.cpp, and more.</p></div>
   </section>
-  <!-- Daftar provider dibuat otomatis dari objek P di js/config.js -->
+  <!-- Provider list is generated automatically from the P object in js/config.js -->
   <section class="py-12">
-    <h2 class="mb-2 font-semibold">Provider cloud</h2>
+    <h2 class="mb-2 font-semibold">Cloud providers</h2>
     <div id="cloud" class="flex flex-wrap gap-2"></div>
-    <h2 class="mb-2 mt-6 font-semibold">Provider lokal</h2>
+    <h2 class="mb-2 mt-6 font-semibold">Local providers</h2>
     <div id="local" class="flex flex-wrap gap-2"></div>
   </section>
-  <p class="text-center text-sm text-mu">Kunci API disimpan di browser Anda dan dikirim langsung ke provider.</p>
+  <p class="text-center text-sm text-mu">API keys are stored in your browser and sent directly to the provider.</p>
 </div>
 <script src="js/brand.js"></script>
 <script src="js/env.js"></script>
 <script src="js/config.js"></script>
 <script>
-for(const v of Object.values(P)){const s=document.createElement('span');s.className='chip';s.textContent=v.n.replace(' (lokal)','');$(v.loc?'#local':'#cloud').append(s)}
+for(const v of Object.values(P)){const s=document.createElement('span');s.className='chip';s.textContent=v.n.replace(' (local)','');$(v.loc?'#local':'#cloud').append(s)}
 </script>
 </body>
 </html>

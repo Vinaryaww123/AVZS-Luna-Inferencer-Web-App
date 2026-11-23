@@ -1,33 +1,33 @@
-/* tour.js — TUTORIAL INTERAKTIF (sorotan + langkah demi langkah).
-   Ubah isi tutorial di array TOUR. Tiap langkah:
-     sel   selector CSS elemen yang disorot (kosong = pesan di tengah layar). Langkah dilewati bila elemennya tidak tampil.
-     t, d  judul dan isi
-     hint  (opsional) ajakan untuk mencoba langsung
-     wait  (opsional) 'click' atau 'change': tutorial maju sendiri setelah Anda mencoba elemen itu
-     act   (opsional) tombol aksi {label, run, until}: menjalankan sesuatu (mis. membuka Pengaturan);
-           tutorial disembunyikan sementara dan dilanjutkan saat elemen `until` (dialog) ditutup
-   Tampil otomatis pada kunjungan pertama. Buka lagi lewat tombol "Tutorial" di header.
-   Pintasan: panah kiri/kanan = mundur/maju, Esc = lewati. */
+/* tour.js — INTERACTIVE TUTORIAL (highlight + step by step).
+   Edit the tutorial content in the TOUR array. Each step:
+     sel   CSS selector of the highlighted element (empty = centered message). The step is skipped if the element is not visible.
+     t, d  title and body
+     hint  (optional) prompt to try something directly
+     wait  (optional) 'click' or 'change': the tutorial advances automatically after you try that element
+     act   (optional) action button {label, run, until}: runs something (e.g. opens Settings);
+           the tutorial is hidden temporarily and resumes when the `until` element (dialog) closes
+   Appears automatically on the first visit. Open it again via the "Tutorial" button in the header.
+   Shortcuts: left/right arrow = back/next, Esc = skip. */
 const TOUR=[
-  {t:'Selamat datang',d:'Tutorial singkat ini memandu Anda memakai aplikasi langkah demi langkah. Anda bisa melewatinya kapan saja.'},
-  {sel:'#nav',t:'Pilih jenis tugas',d:'Chat untuk percakapan, Coder untuk pemrograman, Multimodal untuk bertanya soal gambar, Riset untuk laporan terstruktur, lalu Gambar dan Video untuk membuat media.',hint:'Coba klik salah satu tab sekarang.',wait:'click'},
-  {sel:'#prov',t:'Pilih provider',d:'Cloud (OpenAI, Anthropic, Google, dan lainnya) butuh kunci API. Lokal (Ollama, LM Studio, dan lainnya) berjalan di komputer Anda.',hint:'Coba pilih provider lain.',wait:'change'},
-  {sel:'#cfg',t:'Isi kunci API',d:'Di Pengaturan, buka satu provider, tempel kunci API (atau cek alamat server untuk provider lokal), lalu tekan Tes koneksi.',act:{label:'Buka Pengaturan',run:()=>openSettings(),until:'#dlg'}},
-  {sel:'#mdl',t:'Pilih model',d:'Klik kolom ini untuk melihat semua model dari provider, atau ketik nama model sendiri. Tombol Muat model menyegarkan daftarnya.'},
-  {sel:'#opt',t:'Opsi tiap tab',d:'Isinya menyesuaikan tab: system prompt, lampiran gambar, Alat MCP, atau web search untuk Riset.'},
-  {sel:'#advBox',t:'Pengaturan gambar dan video',d:'Di tab Gambar dan Video, buka panel ini untuk mengatur ukuran, jumlah, steps, seed, CFG, sampler, LoRA, durasi, rasio, dan lainnya. Opsi yang tampil menyesuaikan provider.'},
-  {sel:'#composer',t:'Tulis prompt',d:'Ketik pesan lalu tekan Enter (Shift+Enter untuk baris baru). Tombol Kirim berubah menjadi Berhenti saat model sedang menjawab.'},
-  {t:'Aksi di bawah balasan',d:'Setelah model menjawab, tombol Salin, Bacakan, dan Ulangi prompt muncul di balasan terakhir. Ulangi memakai model yang sedang dipilih, jadi cocok untuk membandingkan model.'},
-  {sel:'a[href="models.html"]',t:'Model lokal',d:'Lihat spesifikasi PC Anda, dapatkan rekomendasi model lokal yang cocok, dan cari model di Hugging Face tanpa keluar dari aplikasi.'},
-  {sel:'a[aria-label="Kembali ke menu utama"]',t:'Menu utama',d:'Kembali ke homepage kapan saja.'},
-  {sel:'#acct',t:'Akun (opsional)',d:'Masuk atau daftar untuk menyinkronkan pengaturan antar perangkat. Butuh server lokal: jalankan python server.py.'},
-  {sel:'#tourBtn',t:'Selesai',d:'Anda siap memakai aplikasi. Buka tutorial ini lagi kapan saja lewat tombol ini.'}
+  {t:'Welcome',d:'This short tutorial guides you through the app step by step. You can skip it at any time.'},
+  {sel:'#nav',t:'Choose a task type',d:'Chat for conversations, Coder for programming, Multimodal for asking about images, Research for structured reports, then Image and Video for creating media.',hint:'Try clicking one of the tabs now.',wait:'click'},
+  {sel:'#prov',t:'Choose a provider',d:'Cloud providers (OpenAI, Anthropic, Google, and others) need an API key. Local providers (Ollama, LM Studio, and others) run on your computer.',hint:'Try choosing another provider.',wait:'change'},
+  {sel:'#cfg',t:'Enter API keys',d:'In Settings, open a provider, paste the API key (or check the server address for local providers), then click Test connection.',act:{label:'Open Settings',run:()=>openSettings(),until:'#dlg'}},
+  {sel:'#mdl',t:'Choose a model',d:'Click this field to see all models from the provider, or type a model name yourself. The Load models button refreshes the list.'},
+  {sel:'#opt',t:'Options for each tab',d:'The contents adapt to the tab: system prompt, image attachments, MCP tools, or web search for Research.'},
+  {sel:'#advBox',t:'Image and video settings',d:'In the Image and Video tabs, open this panel to set size, count, steps, seed, CFG, sampler, LoRA, duration, aspect ratio, and more. The options shown depend on the provider.'},
+  {sel:'#composer',t:'Write a prompt',d:'Type a message and press Enter (Shift+Enter for a new line). The Send button changes to Stop while the model is answering.'},
+  {t:'Actions below replies',d:'After the model answers, Copy, Read aloud, and Retry prompt buttons appear below the last reply. Retry uses the currently selected model, so it is handy for comparing models.'},
+  {sel:'a[href="models.html"]',t:'Local models',d:'View your PC specifications, get recommendations for local models that fit, and search Hugging Face without leaving the app.'},
+  {sel:'a[aria-label="Back to main menu"]',t:'Main menu',d:'Return to the homepage at any time.'},
+  {sel:'#acct',t:'Account (optional)',d:'Sign in or register to sync settings across devices. Requires a local server: run python server.py.'},
+  {sel:'#tourBtn',t:'Done',d:'You are ready to use the app. Open this tutorial again at any time with this button.'}
 ];
-const TOUR_KEY='luna.tour'; // localStorage: 'done' setelah tutorial selesai atau dilewati
+const TOUR_KEY='luna.tour'; // localStorage: 'done' after the tutorial is finished or skipped
 let ti=-1,tctl=null,tpause=false;
 const T=id=>document.getElementById(id);
 
-/* Bangun overlay sekali: lubang sorotan (#tHole, bayangan besar menggelapkan sisanya) dan kartu penjelasan (#tTip) */
+/* Build the overlay once: highlight hole (#tHole, a large shadow darkening the rest) and explanation card (#tTip) */
 function tourBuild(){
   if(T('tour'))return;
   const d=document.createElement('div');d.id='tour';d.className='hidden';
@@ -38,17 +38,17 @@ function tourBuild(){
     <p id="tH" class="mt-1.5 hidden text-sm font-medium text-ac"></p>
     <div id="tA" class="mt-2.5 hidden"></div>
     <div class="mt-3 flex items-center justify-between gap-2">
-      <button id="tSkip" type="button" class="text-sm text-mu hover:text-tx">Lewati</button>
-      <div class="flex gap-2"><button id="tBack" type="button" class="btn">Kembali</button><button id="tNext" type="button" class="btn btn-pri">Lanjut</button></div>
+      <button id="tSkip" type="button" class="text-sm text-mu hover:text-tx">Skip</button>
+      <div class="flex gap-2"><button id="tBack" type="button" class="btn">Back</button><button id="tNext" type="button" class="btn btn-pri">Next</button></div>
     </div>
     <div id="tDots" class="mt-3 flex justify-center gap-1.5"></div>
   </div>`;
   document.body.append(d);
   T('tSkip').onclick=tourEnd;T('tBack').onclick=()=>tourGo(-1);T('tNext').onclick=()=>tourGo(1);
 }
-const tourOk=j=>!TOUR[j].sel||!!document.querySelector(TOUR[j].sel)?.getClientRects().length; // elemen tampil?
+const tourOk=j=>!TOUR[j].sel||!!document.querySelector(TOUR[j].sel)?.getClientRects().length; // element visible?
 
-/* Pindah langkah (dir = +1 maju, -1 mundur); langkah tanpa target tampil dilewati */
+/* Move between steps (dir = +1 forward, -1 back); steps without a visible target are skipped */
 function tourGo(dir){
   let j=ti+dir;
   while(j>=0&&j<TOUR.length&&!tourOk(j))j+=dir;
@@ -61,11 +61,11 @@ function tourShow(i){
   T('tT').textContent=s.t;T('tD').textContent=s.d;T('tN').textContent=`${i+1} / ${TOUR.length}`;
   T('tH').textContent=s.hint||'';T('tH').classList.toggle('hidden',!s.hint);
   T('tBack').disabled=i==0;T('tBack').classList.toggle('opacity-40',i==0);
-  T('tNext').textContent=i==TOUR.length-1?'Selesai':'Lanjut';
+  T('tNext').textContent=i==TOUR.length-1?'Done':'Next';
   T('tDots').innerHTML=TOUR.map((_,k)=>`<i class="h-1.5 w-1.5 rounded-full ${k==i?'bg-ac':'bg-bd'}"></i>`).join('');
   const a=T('tA');a.classList.toggle('hidden',!s.act);a.innerHTML=s.act?`<button id="tAct" type="button" class="btn">${s.act.label}</button>`:'';
-  if(s.act)T('tAct').onclick=()=>tourPause(s.act); // aksi: sembunyikan tutorial sampai dialog ditutup
-  if(s.wait&&el)el.addEventListener(s.wait,()=>setTimeout(()=>{if(ti==i&&!tpause)tourGo(1)},350),{signal:tctl.signal,once:true}); // interaktif: maju setelah dicoba
+  if(s.act)T('tAct').onclick=()=>tourPause(s.act); // action: hide the tutorial until the dialog closes
+  if(s.wait&&el)el.addEventListener(s.wait,()=>setTimeout(()=>{if(ti==i&&!tpause)tourGo(1)},350),{signal:tctl.signal,once:true}); // interactive: advance after trying
   tourPos();T('tNext').focus();
 }
 function tourPause(act){
@@ -74,7 +74,7 @@ function tourPause(act){
   act.run();
 }
 
-/* Letakkan sorotan di elemen target dan kartu di bawah/atas target (atau di tengah bila tanpa target) */
+/* Position the highlight on the target element and the card below/above it (or centered when there is no target) */
 function tourPos(){
   if(ti<0||tpause)return;
   const s=TOUR[ti],el=s.sel&&document.querySelector(s.sel),h=T('tHole'),tip=T('tTip'),vw=innerWidth,vh=innerHeight,pad=6,dim='0 0 0 9999px rgba(0,0,0,.55)';
@@ -100,4 +100,4 @@ addEventListener('keydown',e=>{
   if(e.key=='Escape'){e.preventDefault();tourEnd()}else if(e.key=='ArrowRight')tourGo(1);else if(e.key=='ArrowLeft')tourGo(-1);
 });
 $('#tourBtn').onclick=tourStart;
-if(!localStorage.getItem(TOUR_KEY))setTimeout(tourStart,600); // kunjungan pertama
+if(!localStorage.getItem(TOUR_KEY))setTimeout(tourStart,600); // first visit

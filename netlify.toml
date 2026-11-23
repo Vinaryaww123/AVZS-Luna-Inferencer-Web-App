@@ -1,0 +1,12 @@
+# Netlify static deployment (no accounts, no MCP). Build with: python scripts/build.py static
+[build]
+  command = "python3 scripts/build.py static"
+  publish = "dist"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "same-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

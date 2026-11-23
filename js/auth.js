@@ -1,9 +1,9 @@
-/* auth.js — AKUN (sisi aplikasi): status masuk, sinkron pengaturan, tombol Masuk/Keluar, dan fungsi api().
-   Halaman masuk/daftar ada di login.html (js/login.js). Butuh server: python server.py. Tanpa server aplikasi tetap jalan tanpa akun.
-   Aturan sinkron: masuk ke akun lama = pengaturan lokal diganti data akun; akun baru = membawa pengaturan lokal;
-   keluar = pengaturan lokal dihapus dari browser (data tetap aman di akun). */
-const AUTH={server:false,user:null}; // server: true bila server akun terdeteksi
-function go(u){location.href=u}      // pindah halaman
+/* auth.js — ACCOUNTS (app side): sign-in status, settings sync, Sign in/Sign out button, and the api() function.
+   The sign-in/register page is login.html (js/login.js). Requires a server: python server.py. Without a server, the app still runs without an account.
+   Sync rules: signing into an existing account replaces local settings with account data; a new account carries local settings over;
+   signing out removes local settings from the browser (data stays safe in the account). */
+const AUTH={server:false,user:null}; // server: true when an account server is detected
+function go(u){location.href=u}      // navigate to another page
 async function api(path,body,method){
   const r=await fetch('/api/'+path,{method:method||(body?'POST':'GET'),headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});
   const j=await r.json().catch(()=>({}));
@@ -11,27 +11,27 @@ async function api(path,body,method){
   return j;
 }
 
-/* Kirim pengaturan ke server (ditunda 0,8 dtk). Dipanggil oleh save() di config.js. */
+/* Send settings to the server (debounced by 0.8 s). Called by save() in config.js. */
 let syncT;
 function syncUp(){if(!AUTH.user)return;clearTimeout(syncT);syncT=setTimeout(()=>api('data',{data:S},'PUT').catch(()=>{}),800)}
 
-/* Hanya di halaman aplikasi (yang punya tombol #acct) */
+/* Only on the app page (which has the #acct button) */
 if($('#acct')){
-  const renderAcct=()=>$('#acct').textContent=AUTH.user?`Keluar (${AUTH.user})`:'Masuk';
-  /* Cek status saat halaman dibuka. 401 = server ada tapi belum masuk (mode tamu); error lain = tanpa server. */
+  const renderAcct=()=>$('#acct').textContent=AUTH.user?`Sign out (${AUTH.user})`:'Sign in';
+  /* Check status when the page opens. 401 = server exists but not signed in (guest mode); other errors = no server. */
   (async()=>{
     try{
       AUTH.user=(await api('me')).username;AUTH.server=true;
       const r=(await api('data')).data;
-      if(r&&JSON.stringify(r)!==localStorage.getItem(LS)){localStorage.setItem(LS,JSON.stringify(r));location.reload();return} // data akun lebih baru
+      if(r&&JSON.stringify(r)!==localStorage.getItem(LS)){localStorage.setItem(LS,JSON.stringify(r));location.reload();return} // account data is newer
       if(!r)await api('data',{data:S},'PUT');
     }catch(e){AUTH.server=e.status==401}
     renderAcct();
   })();
-  /* Tombol di header: keluar bila sudah masuk, selain itu ke halaman login */
+  /* Header button: sign out when signed in, otherwise go to the login page */
   $('#acct').onclick=async()=>{
     if(AUTH.user){await api('logout',{}).catch(()=>{});localStorage.removeItem(LS);document.cookie='guest=; Max-Age=0; Path=/';go('login.html');return}
-    if(!AUTH.server)return alert('Fitur akun butuh server lokal. Jalankan "python server.py", lalu buka http://localhost:3000/login.html');
+    if(!AUTH.server)return alert('Account features require the server version of this app. Run "python server.py" to use them.');
     go('login.html?next=app.html');
   };
 }

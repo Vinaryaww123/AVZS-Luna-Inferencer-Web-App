@@ -1,2 +1,2 @@
-# Hanya untuk membangun CSS (server.py tidak butuh paket apa pun)
+# Only needed to build the CSS (server.py requires no packages)
 pytailwindcss>=0.4

@@ -1,19 +1,19 @@
-/* input.css — sumber CSS Tailwind. Hasil build: css/app.css (jalankan python scripts/build.py css / watch).
-   Kelas komponen di bawah dipakai di HTML dan di template js/*.js. Ubah tampilan tombol, kolom, balasan, dan kartu di sini. */
+/* input.css — Tailwind CSS source. Build output: css/app.css (run python scripts/build.py css / watch).
+   The component classes below are used in HTML and in js/*.js templates. Change the look of buttons, fields, replies, and cards here. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer components{
-  /* tombol, kolom input, tab */
+  /* buttons, input fields, tabs */
   .btn{@apply cursor-pointer transition-colors rounded-lg border border-bd bg-sf px-3 py-1.5 text-center hover:border-ac focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
-  /* tombol bar atas (tinggi seragam) */
+  /* top bar buttons (uniform height) */
   .hbtn{@apply flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-bd bg-sf px-2.5 transition-colors hover:border-ac focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
   .btn-pri{@apply border-ac bg-ac font-semibold text-on}
   .field{@apply min-w-0 transition-colors rounded-lg border border-bd bg-sf px-2.5 py-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
   .tab{@apply cursor-pointer transition-colors rounded-lg border border-transparent px-3 py-1.5 text-mu focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
   .tab-on{@apply border-bd bg-sf font-semibold text-tx shadow-sm}
-  /* gelembung pesan: .msg dasar, .msg-u pesan pengguna, .msg-e error */
+  /* message bubbles: .msg base, .msg-u user message, .msg-e error */
   .msg{@apply max-w-full whitespace-pre-wrap break-words rounded-xl border border-bd bg-sf px-3 py-2.5}
   .msg-u{@apply max-w-[85%] self-end bg-cd}
   .msg-e{@apply text-er}
@@ -22,17 +22,17 @@
   .msg h4{@apply mb-0.5 mt-2 font-semibold}
   .msg img,.msg video{@apply mb-1.5 block max-w-full rounded-lg}
   .msg a{@apply text-ac underline}
-  /* tombol ikon di bar aksi balasan */
+  /* icon buttons in the reply action bar */
   .ibtn{@apply cursor-pointer rounded-md p-1.5 text-mu transition-colors hover:bg-cd hover:text-tx focus-visible:outline focus-visible:outline-2 focus-visible:outline-ac}
-  /* tombol pilih file (input file asli disembunyikan dengan sr-only) */
+  /* file picker button (the real file input is hidden with sr-only) */
   .filebtn{@apply inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-bd bg-sf px-3 py-1.5 text-tx transition-colors hover:border-ac hover:text-ac focus-within:outline focus-within:outline-2 focus-within:outline-ac}
   /* homepage */
   .card{@apply rounded-xl border border-bd bg-sf p-4}
   .chip{@apply rounded-full border border-bd bg-sf px-3 py-1 text-sm}
 }
 
-/* ===== ANIMASI STREAMING (di luar layer agar bebas dari purge) =====
-   Matikan semua animasi dengan menghapus blok ini, atau biarkan: otomatis nonaktif bila OS meminta "kurangi gerakan". */
+/* ===== STREAMING ANIMATIONS (outside the layer so they are not purged) =====
+   Disable all animations by removing this block, or leave it: it automatically turns off when the OS asks to "reduce motion". */
 @keyframes rise{from{opacity:0;transform:translateY(6px)}}
 @keyframes caret{50%{opacity:0}}
 @keyframes dot{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:.9;transform:scale(1)}}
@@ -44,7 +44,7 @@
 .dots i:nth-child(3){animation-delay:.3s}
 @media(prefers-reduced-motion:reduce){.msg,.streaming::after,.dots i{animation:none}}
 
-/* ===== BLOK KODE (hasil md() di js/config.js) ===== */
+/* ===== CODE BLOCKS (output of md() in js/config.js) ===== */
 .codeblock{margin:.5rem 0;overflow:hidden;border:1px solid var(--bd);border-radius:.5rem;background:var(--cd);text-align:left}
 .cb-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;border-bottom:1px solid var(--bd);padding:.2rem .75rem;font-size:.75rem;color:var(--mu)}
 .cb-acts{display:flex;gap:.25rem}

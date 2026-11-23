@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
-"""server.py — server lokal tanpa dependensi (Python standar): file statis + API akun.
+"""server.py — dependency-free server (standard Python): static files + account API.
 
-Jalankan:  python server.py   ->  http://localhost:3000/app.html   (butuh Python 3.8+)
-Ubah alamat/port:  PORT=8080 HOST=127.0.0.1 python server.py
-Data akun ada di data/db.json (kata sandi di-hash scrypt; pengaturan pengguna tersimpan apa adanya).
+Run locally:  python server.py   ->  http://localhost:3000/app.html   (requires Python 3.8+)
+Change address/port:  PORT=8080 HOST=127.0.0.1 python server.py
 
-Endpoint:  GET /api/me | POST /api/register | POST /api/login | POST /api/logout | GET/PUT /api/data
-Format file db.json sama dengan versi Node.js lama, jadi akun yang sudah ada tetap bisa dipakai.
+Deployment (see DEPLOY.md):
+  HOST=0.0.0.0        listen on all interfaces (required inside Docker/hosting)
+  DATA_DIR=/data      folder for db.json (mount a persistent disk there)
+  COOKIE_SECURE=1     add the Secure flag to the session cookie (required behind HTTPS)
+  TRUST_PROXY=1       read the client IP from X-Forwarded-For (only behind a trusted proxy)
+  ALLOW_LOCAL_TOOLS=0 disable MCP and /api/system (recommended for public deployments)
+  ALLOW_GUEST=0       require sign-in (hide "Continue without an account")
+
+Account data is in data/db.json by default (passwords are scrypt-hashed; user settings are stored as-is).
+
+Endpoints:  GET /api/health | GET /api/me | POST /api/register | POST /api/login | POST /api/logout | GET/PUT /api/data
+The db.json format matches the old Node.js version, so existing accounts keep working.
 """
 import atexit, hashlib, hmac, json, os, platform, re, secrets, shutil, signal, subprocess, sys, threading, time, traceback, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,17 +24,21 @@ from urllib.parse import urlparse, unquote
 
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get('PORT', 3000))
-HOST = os.environ.get('HOST', '127.0.0.1')   # 127.0.0.1 = hanya komputer ini. Jangan ubah ke 0.0.0.0 tanpa HTTPS.
-DB_FILE = ROOT / 'data' / 'db.json'
-SESSION_MS = 30 * 24 * 3600 * 1000           # masa berlaku sesi: 30 hari
-MAX_BODY = 1_000_000                          # batas ukuran body JSON (byte)
-MAX_FAILS, FAIL_WINDOW = 5, 600               # maksimal 5 login gagal per 10 menit (per IP + pengguna)
+HOST = os.environ.get('HOST', '127.0.0.1')   # 127.0.0.1 = this computer only. Set HOST=0.0.0.0 in Docker/hosting.
+DATA_DIR = Path(os.environ.get('DATA_DIR') or (ROOT / 'data')).expanduser()
+DB_FILE = DATA_DIR / 'db.json'
+COOKIE_SECURE = os.environ.get('COOKIE_SECURE', '0') == '1'   # Secure cookie flag; enable when served over HTTPS
+TRUST_PROXY = os.environ.get('TRUST_PROXY', '0') == '1'       # only when a trusted reverse proxy sets X-Forwarded-For
+ALLOW_LOCAL_TOOLS = os.environ.get('ALLOW_LOCAL_TOOLS', '1') != '0'   # 0 = disable MCP and /api/system (public deployments)
+SESSION_MS = 30 * 24 * 3600 * 1000           # session lifetime: 30 days
+MAX_BODY = 1_000_000                          # JSON body size limit (bytes)
+MAX_FAILS, FAIL_WINDOW = 5, 600               # at most 5 failed sign-ins per 10 minutes (per IP + user)
 
-# Halaman yang butuh login (redirect ke login.html bila belum masuk). index.html dan login.html bebas diakses.
+# Pages that require sign-in (redirect to login.html if not signed in). index.html and login.html are publicly accessible.
 GATED = {'app.html', 'models.html'}
-ALLOW_GUEST = os.environ.get('ALLOW_GUEST', '1') != '0'   # ALLOW_GUEST=0 python server.py  -> wajib login, tombol "tanpa akun" hilang
+ALLOW_GUEST = os.environ.get('ALLOW_GUEST', '1') != '0'   # ALLOW_GUEST=0 python server.py  -> sign-in required, "without account" button hidden
 
-# ---------- Penyimpanan: satu file JSON, dijaga lock supaya aman saat banyak permintaan ----------
+# ---------- Storage: one JSON file, guarded by a lock so it is safe under many requests ----------
 lock = threading.Lock()
 try:
     db = json.loads(DB_FILE.read_text('utf-8'))
@@ -34,46 +47,47 @@ except (OSError, ValueError):
 db.setdefault('users', {}); db.setdefault('sessions', {})
 
 def persist():
-    """Tulis db ke disk secara atomik. Panggil saat memegang lock."""
+    """Write the db to disk atomically. Call while holding the lock."""
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = DB_FILE.with_suffix('.json.tmp')
     tmp.write_text(json.dumps(db), 'utf-8')
     os.replace(tmp, DB_FILE)
 
-# ---------- Helper ----------
+# ---------- Helpers ----------
 now_ms = lambda: int(time.time() * 1000)
 sha = lambda s: hashlib.sha256(s.encode()).hexdigest()
 
 def hash_pw(pw, salt):
-    # Parameter scrypt (N=16384, r=8, p=1) dan salt berupa teks hex, sama dengan versi Node.js lama.
+    # scrypt parameters (N=16384, r=8, p=1) and a hex-text salt, same as the old Node.js version.
     return hashlib.scrypt(pw.encode(), salt=salt.encode(), n=16384, r=8, p=1, dklen=64).hex()
 
 class ApiError(Exception):
     def __init__(self, code, msg):
         super().__init__(msg); self.code, self.msg = code, msg
 
-fails = {}   # pembatas login: "ip|pengguna" -> [waktu gagal, ...]
+fails = {}   # sign-in limiter: "ip|user" -> [failure times, ...]
 def too_many(k):
     a = [t for t in fails.get(k, []) if t > time.time() - FAIL_WINDOW]
     fails[k] = a
     return len(a) >= MAX_FAILS
 
 def start_session(user):
-    """Buat sesi baru; kembalikan nilai header Set-Cookie. Panggil saat memegang lock."""
+    """Create a new session; return the Set-Cookie header value. Call while holding the lock."""
     t = secrets.token_hex(32)
     for k in [k for k, v in db['sessions'].items() if v['exp'] < now_ms()]:
-        del db['sessions'][k]                      # bersihkan sesi kedaluwarsa
-    db['sessions'][sha(t)] = {'user': user, 'exp': now_ms() + SESSION_MS}   # yang disimpan hanya hash token
-    return f'sid={t}; HttpOnly; SameSite=Lax; Path=/; Max-Age={SESSION_MS // 1000}'
+        del db['sessions'][k]                      # remove expired sessions
+    db['sessions'][sha(t)] = {'user': user, 'exp': now_ms() + SESSION_MS}   # only the token hash is stored
+    secure = '; Secure' if COOKIE_SECURE else ''
+    return f'sid={t}; HttpOnly; SameSite=Lax; Path=/; Max-Age={SESSION_MS // 1000}{secure}'
 
-# ---------- Spesifikasi komputer (untuk halaman Model Lokal) ----------
+# ---------- Computer specifications (for the Local Models page) ----------
 _sysinfo = None
 def run(cmd, timeout=5):
     try: return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
     except Exception: return ''
 
 def system_info():
-    """Baca spesifikasi komputer ini (sekali, lalu disimpan). Tiap langkah dibungkus try agar satu kegagalan tidak merusak sisanya."""
+    """Read this computer's specifications (once, then cached). Each step is wrapped in try so one failure does not break the rest."""
     global _sysinfo
     if _sysinfo: return _sysinfo
     sysname = platform.system()
@@ -86,8 +100,8 @@ def system_info():
         elif sysname == 'Darwin':
             info['ram_gb'] = round(int(run(['sysctl', '-n', 'hw.memsize'])) / 2**30, 1)
             info['cpu'] = run(['sysctl', '-n', 'machdep.cpu.brand_string'])
-            if platform.machine() == 'arm64':   # Apple Silicon: CPU dan GPU berbagi memori terpadu
-                info['unified'] = True; info['gpus'] = [{'name': info['cpu'] + ' (GPU terpadu)', 'vram_gb': None}]
+            if platform.machine() == 'arm64':   # Apple Silicon: CPU and GPU share unified memory
+                info['unified'] = True; info['gpus'] = [{'name': info['cpu'] + ' (integrated GPU)', 'vram_gb': None}]
         elif sysname == 'Windows':
             import ctypes
             class MS(ctypes.Structure):
@@ -96,11 +110,11 @@ def system_info():
             info['ram_gb'] = round(ms.total / 2**30, 1)
             info['cpu'] = run(['powershell', '-NoProfile', '-Command', '(Get-CimInstance Win32_Processor | Select-Object -First 1).Name'])
     except Exception: pass
-    # NVIDIA (semua OS): nvidia-smi memberi VRAM yang akurat
+    # NVIDIA (all OSes): nvidia-smi gives accurate VRAM
     for line in run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader,nounits']).splitlines():
         try: n, mb = [x.strip() for x in line.rsplit(',', 1)]; info['gpus'].append({'name': n, 'vram_gb': round(int(mb) / 1024, 1)})
         except ValueError: pass
-    if not info['gpus']:   # GPU lain: hanya nama (VRAM tidak bisa dibaca andal tanpa alat vendor; pengguna mengisi manual)
+    if not info['gpus']:   # Other GPUs: name only (VRAM cannot be read reliably without vendor tools; the user enters it manually)
         if sysname == 'Windows': names = run(['powershell', '-NoProfile', '-Command', '(Get-CimInstance Win32_VideoController).Name']).splitlines()
         elif sysname == 'Linux': names = [re.sub(r'^.*?: ', '', l) for l in run(['lspci']).splitlines() if re.search(r'VGA|3D|Display', l)]
         else: names = []
@@ -108,15 +122,15 @@ def system_info():
     _sysinfo = info
     return info
 
-# ---------- MCP (Model Context Protocol): jembatan antara browser dan server MCP ----------
-# Konfigurasi ada di mcp.json (format sama dengan Claude Desktop). Hanya perintah yang Anda tulis di file itu yang bisa dijalankan;
-# browser tidak bisa menambah atau mengubah server. Transport: stdio (command/args/env) dan HTTP streamable (url/headers).
+# ---------- MCP (Model Context Protocol): bridge between the browser and MCP servers ----------
+# Configuration is in mcp.json (same format as Claude Desktop). Only commands you write in that file can run;
+# the browser cannot add or change servers. Transports: stdio (command/args/env) and HTTP streamable (url/headers).
 MCP_FILE = ROOT / 'mcp.json'
 MCP_PROTO = '2025-06-18'
 class McpError(Exception): pass
 
 class McpClient:
-    """Satu server MCP: mulai lazy saat dipakai, lalu tetap berjalan sampai server.py berhenti atau dimuat ulang."""
+    """One MCP server: starts lazily when used, then keeps running until server.py stops or is reloaded."""
     def __init__(self, name, cfg):
         self.name, self.cfg, self.ready = name, cfg, False
         self.lock, self.wlock = threading.RLock(), threading.Lock()
@@ -125,12 +139,12 @@ class McpClient:
     # --- stdio ---
     def _start(self):
         c = str(self.cfg.get('command', ''))
-        cmd = shutil.which(c) or (sys.executable if c in ('python', 'python3') else c)   # npx.cmd di Windows, python bawaan bila tak ketemu
+        cmd = shutil.which(c) or (sys.executable if c in ('python', 'python3') else c)   # npx.cmd on Windows, bundled Python if not found
         env = {**os.environ, **{k: str(v) for k, v in (self.cfg.get('env') or {}).items()}}
         try:
             self.proc = subprocess.Popen([cmd, *map(str, self.cfg.get('args') or [])], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                          stderr=subprocess.PIPE, env=env, cwd=ROOT, text=True, encoding='utf-8', bufsize=1)
-        except OSError as e: raise McpError(f'Tidak bisa menjalankan "{c}": {e}')
+        except OSError as e: raise McpError(f'Cannot run "{c}": {e}')
         threading.Thread(target=self._read_out, daemon=True).start()
         threading.Thread(target=self._read_err, daemon=True).start()
     def _read_out(self):
@@ -139,8 +153,8 @@ class McpClient:
             except ValueError: continue
             p = self.pending.get(msg.get('id'))
             if p: p[1]['msg'] = msg; p[0].set()
-        for ev, box in list(self.pending.values()):   # proses berhenti: bangunkan semua yang menunggu
-            box['msg'] = {'error': {'message': 'Proses server MCP berhenti. ' + self.err.strip()[-300:]}}; ev.set()
+        for ev, box in list(self.pending.values()):   # process exited: wake everyone waiting
+            box['msg'] = {'error': {'message': 'MCP server process stopped. ' + self.err.strip()[-300:]}}; ev.set()
     def _read_err(self):
         for line in self.proc.stderr: self.err = (self.err + line)[-2000:]
 
@@ -160,11 +174,11 @@ class McpClient:
                             try: m = json.loads(line[5:])
                             except ValueError: continue
                             if m.get('id') == msg.get('id'): return m
-                    raise McpError('Respons SSE tanpa jawaban.')
+                    raise McpError('SSE response without an answer.')
                 body = r.read()
                 return json.loads(body) if body.strip() else None
         except urllib.error.HTTPError as e: raise McpError(f'HTTP {e.code}: {e.read()[:200].decode("utf-8", "replace")}')
-        except (urllib.error.URLError, OSError) as e: raise McpError(f'Tidak bisa terhubung: {e}')
+        except (urllib.error.URLError, OSError) as e: raise McpError(f'Cannot connect: {e}')
 
     # --- JSON-RPC ---
     def rpc(self, method, params=None, timeout=30, notify=False):
@@ -174,13 +188,13 @@ class McpClient:
         if self.cfg.get('url'):
             r = self._http(msg, timeout)
             if notify: return None
-            if r is None: raise McpError('Server tidak memberi jawaban.')
+            if r is None: raise McpError('Server gave no answer.')
         else:
-            if self.proc is None or self.proc.poll() is not None: raise McpError('Proses server MCP tidak berjalan. ' + self.err.strip()[-300:])
+            if self.proc is None or self.proc.poll() is not None: raise McpError('MCP server process is not running. ' + self.err.strip()[-300:])
             if not notify: ev, box = threading.Event(), {}; self.pending[mid] = (ev, box)
             with self.wlock: self.proc.stdin.write(json.dumps(msg) + '\n'); self.proc.stdin.flush()
             if notify: return None
-            if not ev.wait(timeout): self.pending.pop(mid, None); raise McpError(f'Waktu habis ({timeout} dtk). ' + self.err.strip()[-300:])
+            if not ev.wait(timeout): self.pending.pop(mid, None); raise McpError(f'Timed out ({timeout} s). ' + self.err.strip()[-300:])
             self.pending.pop(mid, None); r = box['msg']
         if 'error' in r: raise McpError(str(r['error'].get('message', 'error')))
         return r.get('result') or {}
@@ -189,7 +203,7 @@ class McpClient:
         with self.lock:
             if self.ready: return
             if not self.cfg.get('url'):
-                if not self.cfg.get('command'): raise McpError('Isi "command" atau "url" di mcp.json.')
+                if not self.cfg.get('command'): raise McpError('Fill in "command" or "url" in mcp.json.')
                 self._start()
             try:
                 self.rpc('initialize', {'protocolVersion': MCP_PROTO, 'capabilities': {}, 'clientInfo': {'name': 'avzs-luna-inferencer', 'version': '1.0'}}, timeout=45)
@@ -220,38 +234,54 @@ def mcp_config():
     return {n: c for n, c in cfg.items() if isinstance(c, dict)}
 def mcp_get(name):
     cfg = mcp_config().get(name)
-    if cfg is None: raise McpError(f'Server "{name}" tidak ada di mcp.json.')
+    if cfg is None: raise McpError(f'Server "{name}" is not in mcp.json.')
     c = mcp_clients.get(name)
-    if c is None or c.cfg != cfg:           # konfigurasi berubah -> mulai ulang
+    if c is None or c.cfg != cfg:           # configuration changed -> restart
         if c: c.close()
         c = mcp_clients[name] = McpClient(name, cfg)
     return c
 
 MIME = {'.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
         '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon'}
-PAGES = {'index.html', 'app.html', 'models.html', 'login.html'}       # halaman di root yang boleh diakses
-DIRS = {'css', 'js', 'assets'}           # folder yang boleh diakses (server.py, data/, .env, dll. tidak bisa diunduh)
+PAGES = {'index.html', 'app.html', 'models.html', 'login.html'}       # root pages that may be accessed
+DIRS = {'css', 'js', 'assets'}           # folders that may be accessed (server.py, data/, .env, etc. cannot be downloaded)
 
 class Handler(BaseHTTPRequestHandler):
     server_version = 'LunaServer'
-    def log_message(self, fmt, *args): pass          # hapus baris ini bila ingin log akses di terminal
+    def log_message(self, fmt, *args): pass          # remove this line to log access in the terminal
 
-    # ----- respons -----
+    # ----- responses -----
+    def security_headers(self):
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Frame-Options', 'DENY')
+        self.send_header('Referrer-Policy', 'same-origin')
+        self.send_header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+        if COOKIE_SECURE:
+            self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+
     def send_json(self, code, obj, cookie=None):
         body = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header('Content-Type', 'application/json'); self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Length', str(len(body)))
+        self.security_headers()
         if cookie: self.send_header('Set-Cookie', cookie)
         self.end_headers(); self.wfile.write(body)
 
+    def client_ip(self):
+        """Client IP for rate limiting. Only trust X-Forwarded-For when TRUST_PROXY=1 (behind a reverse proxy)."""
+        if TRUST_PROXY:
+            xff = self.headers.get('X-Forwarded-For', '')
+            if xff: return xff.split(',')[0].strip()
+        return self.client_address[0]
+
     def read_json(self):
         n = int(self.headers.get('Content-Length') or 0)
-        if n > MAX_BODY: raise ApiError(413, 'Data terlalu besar')
+        if n > MAX_BODY: raise ApiError(413, 'Data too large')
         raw = self.rfile.read(n) if n else b''
         try: body = json.loads(raw) if raw else {}
-        except ValueError: raise ApiError(400, 'JSON tidak valid')
-        if not isinstance(body, dict): raise ApiError(400, 'JSON harus berupa objek')
+        except ValueError: raise ApiError(400, 'Invalid JSON')
+        if not isinstance(body, dict): raise ApiError(400, 'JSON must be an object')
         return body
 
     def token(self):
@@ -273,50 +303,53 @@ class Handler(BaseHTTPRequestHandler):
             path = urlparse(self.path).path
             if path.startswith('/api/'): self.api(path[5:])
             elif self.command == 'GET': self.static(path)
-            else: self.send_json(405, {'error': 'Metode tidak diizinkan'})
+            else: self.send_json(405, {'error': 'Method not allowed'})
         except Exception:
             traceback.print_exc()
-            try: self.send_json(500, {'error': 'Kesalahan server'})
+            try: self.send_json(500, {'error': 'Server error'})
             except Exception: pass
 
-    # ----- API akun -----
+    # ----- account API -----
     def api(self, route):
         try:
             m, body = self.command, {}
-            if m != 'GET':   # pertahanan CSRF dasar: Origin harus sama dengan Host, dan body harus JSON
+            if m != 'GET':   # basic CSRF defense: Origin must match Host, and the body must be JSON
                 o = self.headers.get('Origin')
-                if o and urlparse(o).netloc != self.headers.get('Host'): raise ApiError(403, 'Origin ditolak')
+                if o and urlparse(o).netloc != self.headers.get('Host'): raise ApiError(403, 'Origin rejected')
                 if 'application/json' not in (self.headers.get('Content-Type') or ''):
-                    raise ApiError(415, 'Content-Type harus application/json')
+                    raise ApiError(415, 'Content-Type must be application/json')
                 body = self.read_json()
             me = self.user_of()
 
+            if route == 'health' and m == 'GET':
+                return self.send_json(200, {'ok': True})
+
             if route == 'me' and m == 'GET':
-                if not me: return self.send_json(401, {'error': 'Belum masuk', 'allow_guest': ALLOW_GUEST})
+                if not me: return self.send_json(401, {'error': 'Not signed in', 'allow_guest': ALLOW_GUEST})
                 return self.send_json(200, {'username': me})
 
             if route == 'register' and m == 'POST':
                 u = str(body.get('username') or '').strip().lower(); p = str(body.get('password') or '')
                 if not re.fullmatch(r'[a-z0-9_.-]{3,32}', u):
-                    raise ApiError(400, 'Nama pengguna 3-32 karakter: huruf, angka, titik, strip, atau garis bawah.')
-                if not 8 <= len(p) <= 200: raise ApiError(400, 'Kata sandi minimal 8 karakter.')
+                    raise ApiError(400, 'Username 3-32 characters: letters, numbers, dots, dashes, or underscores.')
+                if not 8 <= len(p) <= 200: raise ApiError(400, 'Password must be at least 8 characters.')
                 salt = secrets.token_hex(16); h = hash_pw(p, salt)
                 with lock:
-                    if u in db['users']: raise ApiError(409, 'Nama pengguna sudah dipakai.')
+                    if u in db['users']: raise ApiError(409, 'Username is already taken.')
                     db['users'][u] = {'salt': salt, 'hash': h, 'data': None, 'created': now_ms()}
                     cookie = start_session(u); persist()
                 return self.send_json(200, {'username': u}, cookie)
 
             if route == 'login' and m == 'POST':
                 u = str(body.get('username') or '').strip().lower(); p = str(body.get('password') or '')[:200]
-                k = f'{self.client_address[0]}|{u}'
+                k = f'{self.client_ip()}|{u}'
                 with lock: blocked = too_many(k)
-                if blocked: raise ApiError(429, 'Terlalu banyak percobaan. Coba lagi dalam 10 menit.')
+                if blocked: raise ApiError(429, 'Too many attempts. Try again in 10 minutes.')
                 with lock: rec = dict(db['users'].get(u) or {})
-                h = hash_pw(p, rec.get('salt', '0' * 32))        # tetap menghitung hash walau pengguna tidak ada
+                h = hash_pw(p, rec.get('salt', '0' * 32))        # still compute the hash even if the user does not exist
                 if not rec or not hmac.compare_digest(h, rec['hash']):
                     with lock: fails.setdefault(k, []).append(time.time())
-                    raise ApiError(401, 'Nama pengguna atau kata sandi salah.')
+                    raise ApiError(401, 'Incorrect username or password.')
                 with lock:
                     fails.pop(k, None); cookie = start_session(u); persist()
                 return self.send_json(200, {'username': u}, cookie)
@@ -325,18 +358,18 @@ class Handler(BaseHTTPRequestHandler):
                 t = self.token()
                 if t:
                     with lock: db['sessions'].pop(sha(t), None); persist()
-                return self.send_json(200, {'ok': True}, 'sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0')
+                return self.send_json(200, {'ok': True}, 'sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0' + ('; Secure' if COOKIE_SECURE else ''))
 
-            if route == 'data':   # pengaturan per akun (kunci API, URL, model terakhir)
-                if not me: raise ApiError(401, 'Belum masuk')
+            if route == 'data':   # per-account settings (API keys, URLs, last model)
+                if not me: raise ApiError(401, 'Not signed in')
                 if m == 'GET':
                     with lock: data = (db['users'].get(me) or {}).get('data')
                     return self.send_json(200, {'data': data})
                 if m == 'PUT':
                     d = body.get('data')
-                    if not isinstance(d, dict): raise ApiError(400, 'data harus berupa objek')
+                    if not isinstance(d, dict): raise ApiError(400, 'data must be an object')
                     with lock:
-                        if me not in db['users']: raise ApiError(401, 'Belum masuk')
+                        if me not in db['users']: raise ApiError(401, 'Not signed in')
                         db['users'][me]['data'] = d; persist()
                     return self.send_json(200, {'ok': True})
 
@@ -344,25 +377,29 @@ class Handler(BaseHTTPRequestHandler):
                 self.require_local(True)
                 return self.mcp(route[4:], m, body)
 
-            if route == 'system' and m == 'GET':   # spesifikasi komputer ini; hanya untuk akses dari komputer yang sama
+            if route == 'system' and m == 'GET':   # this computer's specifications; only accessible from the same computer
                 self.require_local(False)
                 return self.send_json(200, system_info())
 
-            raise ApiError(404, 'Endpoint tidak ada')
+            raise ApiError(404, 'Endpoint not found')
         except ApiError as e:
             self.send_json(e.code, {'error': e.msg})
 
-    # ----- keamanan akses lokal -----
+    # ----- local access security -----
     def require_local(self, need_app):
-        """Hanya dari komputer ini: IP loopback + header Host localhost (menahan DNS rebinding). need_app: wajib login atau cookie tamu."""
+        """Only from this computer: loopback IP + localhost Host header (blocks DNS rebinding). need_app: sign-in or guest cookie required."""
+        if not ALLOW_LOCAL_TOOLS:
+            raise ApiError(403, 'Local tools are disabled on this server.')
+        if any(self.headers.get(h) for h in ('Forwarded', 'X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Proto', 'X-Real-IP', 'CF-Connecting-IP', 'True-Client-IP')):
+            raise ApiError(403, 'Only direct local access is allowed (proxy headers detected).')
         host = self.headers.get('Host', '')
         name = host[1:host.index(']')] if host.startswith('[') and ']' in host else host.split(':')[0]
         if self.client_address[0] not in ('127.0.0.1', '::1', '::ffff:127.0.0.1') or name not in ('localhost', '127.0.0.1', '::1'):
-            raise ApiError(403, 'Hanya dari komputer ini (buka lewat http://localhost).')
+            raise ApiError(403, 'Only from this computer (open via http://localhost).')
         if need_app and not self.user_of() and not (ALLOW_GUEST and re.search(r'(?:^|;\s*)guest=1(?:;|$)', self.headers.get('Cookie', ''))):
-            raise ApiError(403, 'Masuk dulu atau pilih lanjut tanpa akun.')
+            raise ApiError(403, 'Sign in first or choose continue without an account.')
 
-    # ----- API MCP -----
+    # ----- MCP API -----
     def mcp(self, route, m, body):
         try:
             if route == 'servers' and m == 'GET':
@@ -379,9 +416,9 @@ class Handler(BaseHTTPRequestHandler):
                 mcp_clients.clear()
                 return self.send_json(200, {'ok': True})
         except McpError as e: raise ApiError(502, str(e))
-        raise ApiError(404, 'Endpoint tidak ada')
+        raise ApiError(404, 'Endpoint not found')
 
-    # ----- file statis -----
+    # ----- static files -----
     def static(self, path):
         rel = unquote('/index.html' if path == '/' else path).lstrip('/')
         f = (ROOT / rel).resolve()
@@ -389,22 +426,24 @@ class Handler(BaseHTTPRequestHandler):
         if mime and ROOT in f.parents and f.is_file():
             parts = f.relative_to(ROOT).parts
             if (len(parts) == 1 and parts[0] in PAGES) or parts[0] in DIRS:
-                guest = ALLOW_GUEST and re.search(r'(?:^|;\s*)guest=1(?:;|$)', self.headers.get('Cookie', ''))   # cookie "tamu" dari login.html
+                guest = ALLOW_GUEST and re.search(r'(?:^|;\s*)guest=1(?:;|$)', self.headers.get('Cookie', ''))   # "guest" cookie from login.html
                 if parts[0] in GATED and not self.user_of() and not guest:
                     self.send_response(302); self.send_header('Location', f'/login.html?next={parts[0]}')
-                    self.send_header('Cache-Control', 'no-store'); self.send_header('Content-Length', '0'); self.end_headers()
+                    self.send_header('Cache-Control', 'no-store'); self.send_header('Content-Length', '0')
+                    self.security_headers(); self.end_headers()
                     return
                 data = f.read_bytes()
                 self.send_response(200)
                 self.send_header('Content-Type', mime); self.send_header('Cache-Control', 'no-cache')
                 self.send_header('Content-Length', str(len(data)))
-                self.end_headers(); self.wfile.write(data)
+                self.security_headers(); self.end_headers(); self.wfile.write(data)
                 return
-        self.send_json(404, {'error': 'Tidak ditemukan'})
+        self.send_json(404, {'error': 'Not found'})
 
 if __name__ == '__main__':
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
-    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))   # supaya server MCP anak ikut dihentikan (atexit)
-    print(f'AVZS Luna Inferencer: http://{HOST}:{PORT}/app.html   (Ctrl+C untuk berhenti)')
+    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))   # so child MCP servers are stopped too (atexit)
+    print(f'AVZS Luna Inferencer: http://{HOST}:{PORT}/app.html   (Ctrl+C to stop)')
+    print(f'Data: {DB_FILE}   secure cookies: {"on" if COOKIE_SECURE else "off"}   trust proxy: {"on" if TRUST_PROXY else "off"}')
     try: srv.serve_forever()
-    except KeyboardInterrupt: print('\nBerhenti.')
+    except KeyboardInterrupt: print('\nStopped.')
