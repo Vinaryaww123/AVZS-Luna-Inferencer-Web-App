@@ -226,6 +226,7 @@ $('#prev').addEventListener('close',()=>{$('#prevFrame').srcdoc=''}); // stop pr
 const MCP={cache:{},tools:{},allow:new Set()}; // cache: server -> tools Promise | tools: server -> tools | allow: session permissions
 const CHV='<svg viewBox="0 0 24 24" class="h-4 w-4 text-mu transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 const mcpServers=async()=>(await api('mcp/servers')).servers;
+const mcpInfo=async()=>await api('mcp/servers');
 const mcpLoad=server=>MCP.cache[server]||(MCP.cache[server]=api('mcp/tools',{server}).then(r=>(MCP.tools[server]=r.tools),e=>{delete MCP.cache[server];throw e}));
 function mcpText(r){ // MCP result -> text for the model
   const t=(r.content||[]).map(x=>x.type=='text'?x.text:x.type=='image'?'[image]':x.resource?.text||JSON.stringify(x)).join('\n')||JSON.stringify(r.structuredContent||r);
@@ -273,14 +274,15 @@ async function mcpRun(c,map,say){
 }
 /* Settings > MCP panel: server list from mcp.json, enable/disable, tool list */
 async function renderMcp(){
-  const box=$('#pvs');box.innerHTML='<p class="text-sm text-mu">Loading…</p>';let sv;
-  try{sv=await mcpServers()}catch(e){box.innerHTML=`<p class="text-sm text-mu">MCP needs a local server. Run <code>python server.py</code>, then open the app at http://localhost:3000 (error: ${esc(e.message)}).</p>`;return}
+  const box=$('#pvs');box.innerHTML='<p class="text-sm text-mu">Loading…</p>';let sv,info;
+  try{info=await mcpInfo();sv=info.servers}catch(e){box.innerHTML=`<p class="text-sm text-mu">MCP needs a local server. Run <code>python server.py</code>, then open the app at http://localhost:3000 (error: ${esc(e.message)}).</p>`;return}
   const off=S.mcp?.off||{};
-  box.innerHTML=`<label class="flex items-center gap-1.5 text-sm"><input id="mcpConfirm" type="checkbox" class="accent-ac" ${S.mcp?.confirm===false?'':'checked'}> Ask for confirmation before running tools</label>`
+  const fileHint=info.file?`<p class="text-xs text-mu">Configuration file: <code class="break-all">${esc(info.file)}</code></p>`:'';
+  box.innerHTML=fileHint+`<label class="flex items-center gap-1.5 text-sm"><input id="mcpConfirm" type="checkbox" class="accent-ac" ${S.mcp?.confirm===false?'':'checked'}> Ask for confirmation before running tools</label>`
     +(sv.length?sv.map(s=>`<details class="group rounded-lg border border-bd bg-sf"><summary class="flex cursor-pointer items-center justify-between gap-2 px-3 py-2"><span class="font-medium">${esc(s.name)}</span><span class="flex items-center gap-2"><span class="text-xs text-mu">${s.type}${s.ready?' · active':''}</span>${CHV}</span></summary>
       <div class="grid gap-2 border-t border-bd p-3"><label class="flex items-center gap-1.5 text-sm"><input type="checkbox" data-moff="${attr(s.name)}" class="accent-ac" ${off[s.name]?'':'checked'}> Use this server</label>
       <div data-tl class="grid gap-1"></div><div class="flex flex-wrap items-center gap-2"><button type="button" class="btn text-sm" data-mload="${attr(s.name)}">Load tools</button><span class="text-sm text-mu" data-mst></span></div></div></details>`).join('')
-      :'<p class="text-sm text-mu">No MCP servers yet. Copy <code>mcp.example.json</code> to <code>mcp.json</code> and configure the servers you want.</p>')
+      :`<p class="text-sm text-mu">No MCP servers yet. ${info.file?'Edit the configuration file above':'Copy <code>mcp.example.json</code> to <code>mcp.json</code>'}, add the servers you want, then press Reload.</p>`)
     +'<div><button type="button" class="btn text-sm" id="mcpReload">Reload mcp.json</button></div>';
 }
 async function mcpShowTools(name,det){

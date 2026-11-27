@@ -9,6 +9,8 @@ There are two ways to publish this app:
 
 The app calls AI providers **directly from the visitor's browser**. There is no provider proxy, so provider CORS rules and the visitor's own API keys apply in both modes. Local providers (Ollama, LM Studio, etc.) generally require the app to run on the same computer.
 
+Looking for the native desktop app instead? See [DESKTOP.md](DESKTOP.md).
+
 ---
 
 ## Option 1 — Full app with accounts (Docker)

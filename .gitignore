@@ -5,5 +5,9 @@ js/env.js
 data/
 mcp.json
 dist/
+# Desktop build outputs and local virtualenv
+build/
+dist-desktop/
+.venv*/
 # Local backup copy, not part of the deployed app
 avzs-luna-inferencer/

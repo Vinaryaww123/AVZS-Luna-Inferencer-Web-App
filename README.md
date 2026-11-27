@@ -8,6 +8,7 @@ The backend and build tools use standard Python. Node.js is not required.
 - With an account: `python server.py`, then open http://localhost:3000/app.html (Python 3.8+, no packages to install).
 - Change the UI: `pip install -r requirements-dev.txt`, then `python scripts/build.py watch` (or `css` for a one-off build).
 - Build a static site for hosting: `python scripts/build.py static` (output in `dist/`).
+- Desktop app: `pip install -r requirements-desktop.txt`, then `python desktop.py`. Build a standalone executable with `python scripts/build_desktop.py` (see [DESKTOP.md](DESKTOP.md)).
 - Initial values via env: copy `.env.example` to `.env`, fill it in, then run `python scripts/build.py env` (or `all`). The result is `js/env.js`.
   Values in `.env` are readable by anyone who opens the page. For personal use only.
 
@@ -15,6 +16,8 @@ The backend and build tools use standard Python. Node.js is not required.
 See [DEPLOY.md](DEPLOY.md) for two ready-made paths:
 - **Full app with accounts:** Docker + Render Blueprint (`render.yaml`), with a persistent disk.
 - **Static site:** `dist/` for GitHub Pages, Netlify, Vercel, or Cloudflare Pages (no accounts or MCP).
+
+For a native desktop app, see [DESKTOP.md](DESKTOP.md): run `python desktop.py`, or build a standalone executable with `python scripts/build_desktop.py`.
 
 ## Accounts (optional)
 With `python server.py`, opening `app.html` or `models.html` without signing in redirects to `login.html` (sign in/register).
@@ -26,7 +29,7 @@ Without a server (opening the files directly), the app still works as usual, wit
 - The `db.json` format is the same as the old Node.js version, so old accounts keep working.
 
 ## MCP (tools for models)
-Requires `python server.py`. Copy `mcp.example.json` to `mcp.json` and fill in the servers you want (same format as Claude Desktop):
+Requires `python server.py` (or the desktop app). Copy `mcp.example.json` to `mcp.json` and fill in the servers you want (same format as Claude Desktop):
 stdio (`command`, `args`, `env`) or HTTP streamable (`url`, `headers`). stdio servers use `uvx` (Python) or `npx` (Node), which must be installed.
 In the Chat or Coder tab, check "MCP tools"; configure servers and tools in Settings > MCP. Every tool call asks for confirmation (can be disabled).
 Only commands in `mcp.json` can run (the browser cannot add them), and only from this computer. Use only servers you trust.
@@ -35,6 +38,8 @@ The old SSE servers and OAuth are not supported yet. `scripts/mcp_demo.py` is an
 ## Structure and where to change things
 - `index.html` homepage, `app.html` app, `models.html` PC specs + recommendations + Hugging Face search, `login.html` sign-in/register page
 - `server.py` local server + account API
+- `desktop.py` native desktop launcher (pywebview); `scripts/build_desktop.py` builds the executable (see `DESKTOP.md`)
+- `requirements-desktop.txt` pywebview + PyInstaller for the desktop app (the web server needs no packages)
 - `Dockerfile`, `render.yaml`, `netlify.toml`, `vercel.json`, `.github/workflows/pages.yml` deployment files (see `DEPLOY.md`)
 - `js/brand.js` name, tagline, logo (replace `assets/logo.svg`, or upload via Settings)
 - `js/config.js` providers (`P`), tabs (`M`), default models (`DM`), per-tab options (`OPT`), advanced image/video settings (`GEN`)

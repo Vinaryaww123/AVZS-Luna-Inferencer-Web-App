@@ -8,6 +8,8 @@ avzs-luna-inferencer/
 __pycache__/
 *.pyc
 dist/
+dist-desktop/
+build/
 .venv/
 venv/
 node_modules/

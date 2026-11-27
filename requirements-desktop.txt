@@ -1,0 +1,4 @@
+# Desktop app and Windows/macOS/Linux executable (the web server itself needs no packages)
+# Install:  pip install -r requirements-desktop.txt
+pywebview>=5.0
+pyinstaller>=6.0

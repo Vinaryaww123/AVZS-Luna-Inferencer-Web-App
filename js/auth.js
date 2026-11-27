@@ -2,7 +2,7 @@
    The sign-in/register page is login.html (js/login.js). Requires a server: python server.py. Without a server, the app still runs without an account.
    Sync rules: signing into an existing account replaces local settings with account data; a new account carries local settings over;
    signing out removes local settings from the browser (data stays safe in the account). */
-const AUTH={server:false,user:null}; // server: true when an account server is detected
+const AUTH={server:false,user:null,desktop:false}; // server: true when an account server is detected
 function go(u){location.href=u}      // navigate to another page
 async function api(path,body,method){
   const r=await fetch('/api/'+path,{method:method||(body?'POST':'GET'),headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});
@@ -25,7 +25,10 @@ if($('#acct')){
       const r=(await api('data')).data;
       if(r&&JSON.stringify(r)!==localStorage.getItem(LS)){localStorage.setItem(LS,JSON.stringify(r));location.reload();return} // account data is newer
       if(!r)await api('data',{data:S},'PUT');
-    }catch(e){AUTH.server=e.status==401}
+    }catch(e){
+      AUTH.server=e.status==401;AUTH.desktop=!!e.data?.desktop;
+      if(AUTH.desktop)$('#acct').classList.add('hidden');   // desktop app: no sign-in/account button
+    }
     renderAcct();
   })();
   /* Header button: sign out when signed in, otherwise go to the login page */

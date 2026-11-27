@@ -12,6 +12,13 @@ Deployment (see DEPLOY.md):
   ALLOW_LOCAL_TOOLS=0 disable MCP and /api/system (recommended for public deployments)
   ALLOW_GUEST=0       require sign-in (hide "Continue without an account")
 
+Desktop app (see DESKTOP.md):
+  DESKTOP=1           desktop mode: no page sign-in gate, account button hidden
+  LUNA_ROOT=<folder>  folder containing the web files (used by the packaged app)
+  DATA_DIR=<folder>   writable per-user data folder
+  MCP_FILE=<file>     path to mcp.json (default: ROOT/mcp.json)
+  MCP_CWD=<folder>    working folder for stdio MCP servers (default: ROOT)
+
 Account data is in data/db.json by default (passwords are scrypt-hashed; user settings are stored as-is).
 
 Endpoints:  GET /api/health | GET /api/me | POST /api/register | POST /api/login | POST /api/logout | GET/PUT /api/data
@@ -22,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(os.environ.get('LUNA_ROOT') or Path(__file__).resolve().parent).resolve()
 PORT = int(os.environ.get('PORT', 3000))
 HOST = os.environ.get('HOST', '127.0.0.1')   # 127.0.0.1 = this computer only. Set HOST=0.0.0.0 in Docker/hosting.
 DATA_DIR = Path(os.environ.get('DATA_DIR') or (ROOT / 'data')).expanduser()
@@ -30,6 +37,7 @@ DB_FILE = DATA_DIR / 'db.json'
 COOKIE_SECURE = os.environ.get('COOKIE_SECURE', '0') == '1'   # Secure cookie flag; enable when served over HTTPS
 TRUST_PROXY = os.environ.get('TRUST_PROXY', '0') == '1'       # only when a trusted reverse proxy sets X-Forwarded-For
 ALLOW_LOCAL_TOOLS = os.environ.get('ALLOW_LOCAL_TOOLS', '1') != '0'   # 0 = disable MCP and /api/system (public deployments)
+DESKTOP = os.environ.get('DESKTOP', '0') == '1'                # native desktop window: no login page, local tools available
 SESSION_MS = 30 * 24 * 3600 * 1000           # session lifetime: 30 days
 MAX_BODY = 1_000_000                          # JSON body size limit (bytes)
 MAX_FAILS, FAIL_WINDOW = 5, 600               # at most 5 failed sign-ins per 10 minutes (per IP + user)
@@ -125,7 +133,8 @@ def system_info():
 # ---------- MCP (Model Context Protocol): bridge between the browser and MCP servers ----------
 # Configuration is in mcp.json (same format as Claude Desktop). Only commands you write in that file can run;
 # the browser cannot add or change servers. Transports: stdio (command/args/env) and HTTP streamable (url/headers).
-MCP_FILE = ROOT / 'mcp.json'
+MCP_FILE = Path(os.environ.get('MCP_FILE') or (ROOT / 'mcp.json')).expanduser()
+MCP_CWD = Path(os.environ.get('MCP_CWD') or ROOT).expanduser()   # working folder for stdio MCP servers
 MCP_PROTO = '2025-06-18'
 class McpError(Exception): pass
 
@@ -143,7 +152,7 @@ class McpClient:
         env = {**os.environ, **{k: str(v) for k, v in (self.cfg.get('env') or {}).items()}}
         try:
             self.proc = subprocess.Popen([cmd, *map(str, self.cfg.get('args') or [])], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                         stderr=subprocess.PIPE, env=env, cwd=ROOT, text=True, encoding='utf-8', bufsize=1)
+                                         stderr=subprocess.PIPE, env=env, cwd=MCP_CWD, text=True, encoding='utf-8', bufsize=1)
         except OSError as e: raise McpError(f'Cannot run "{c}": {e}')
         threading.Thread(target=self._read_out, daemon=True).start()
         threading.Thread(target=self._read_err, daemon=True).start()
@@ -325,8 +334,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {'ok': True})
 
             if route == 'me' and m == 'GET':
-                if not me: return self.send_json(401, {'error': 'Not signed in', 'allow_guest': ALLOW_GUEST})
-                return self.send_json(200, {'username': me})
+                if not me: return self.send_json(401, {'error': 'Not signed in', 'allow_guest': ALLOW_GUEST, 'desktop': DESKTOP})
+                return self.send_json(200, {'username': me, 'desktop': DESKTOP})
 
             if route == 'register' and m == 'POST':
                 u = str(body.get('username') or '').strip().lower(); p = str(body.get('password') or '')
@@ -396,14 +405,14 @@ class Handler(BaseHTTPRequestHandler):
         name = host[1:host.index(']')] if host.startswith('[') and ']' in host else host.split(':')[0]
         if self.client_address[0] not in ('127.0.0.1', '::1', '::ffff:127.0.0.1') or name not in ('localhost', '127.0.0.1', '::1'):
             raise ApiError(403, 'Only from this computer (open via http://localhost).')
-        if need_app and not self.user_of() and not (ALLOW_GUEST and re.search(r'(?:^|;\s*)guest=1(?:;|$)', self.headers.get('Cookie', ''))):
+        if need_app and not DESKTOP and not self.user_of() and not (ALLOW_GUEST and re.search(r'(?:^|;\s*)guest=1(?:;|$)', self.headers.get('Cookie', ''))):
             raise ApiError(403, 'Sign in first or choose continue without an account.')
 
     # ----- MCP API -----
     def mcp(self, route, m, body):
         try:
             if route == 'servers' and m == 'GET':
-                return self.send_json(200, {'configured': MCP_FILE.exists(), 'servers': [
+                return self.send_json(200, {'configured': MCP_FILE.exists(), 'file': str(MCP_FILE), 'servers': [
                     {'name': n, 'type': 'http' if c.get('url') else 'stdio', 'ready': bool(mcp_clients.get(n) and mcp_clients[n].ready)} for n, c in mcp_config().items()]})
             if route == 'tools' and m == 'POST':
                 tools = mcp_get(str(body.get('server', ''))).list_tools()
@@ -427,7 +436,7 @@ class Handler(BaseHTTPRequestHandler):
             parts = f.relative_to(ROOT).parts
             if (len(parts) == 1 and parts[0] in PAGES) or parts[0] in DIRS:
                 guest = ALLOW_GUEST and re.search(r'(?:^|;\s*)guest=1(?:;|$)', self.headers.get('Cookie', ''))   # "guest" cookie from login.html
-                if parts[0] in GATED and not self.user_of() and not guest:
+                if parts[0] in GATED and not DESKTOP and not self.user_of() and not guest:
                     self.send_response(302); self.send_header('Location', f'/login.html?next={parts[0]}')
                     self.send_header('Cache-Control', 'no-store'); self.send_header('Content-Length', '0')
                     self.security_headers(); self.end_headers()
@@ -445,5 +454,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))   # so child MCP servers are stopped too (atexit)
     print(f'AVZS Luna Inferencer: http://{HOST}:{PORT}/app.html   (Ctrl+C to stop)')
     print(f'Data: {DB_FILE}   secure cookies: {"on" if COOKIE_SECURE else "off"}   trust proxy: {"on" if TRUST_PROXY else "off"}')
+    if DESKTOP: print(f'Desktop mode   MCP config: {MCP_FILE}')
     try: srv.serve_forever()
     except KeyboardInterrupt: print('\nStopped.')
