@@ -6,6 +6,10 @@
 <title>Local Models — AVZS Luna Inferencer</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/app.css">
+<script>
+/* Apply a saved color mode/accent before the first paint (default is untouched). */
+try{const t=(JSON.parse(localStorage.getItem('studio-ai.v1')||'{}').theme||{});if(t.mode==='light'||t.mode==='dark')document.documentElement.dataset.theme=t.mode;if(t.accent){document.documentElement.style.setProperty('--ac',t.accent);const n=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(t.accent);if(n){const r=parseInt(n[1],16),g=parseInt(n[2],16),b=parseInt(n[3],16);document.documentElement.style.setProperty('--on',(0.299*r+0.587*g+0.114*b)>150?'#0b1020':'#fff')}}}catch(e){}
+</script>
 </head>
 <body class="min-h-dvh bg-bg font-sans text-[15px] leading-relaxed text-tx">
 <div class="mx-auto max-w-4xl px-4 pb-16">
@@ -27,6 +31,7 @@
     </div>
     <p id="hwSrc" class="mt-2 text-xs text-mu"></p>
     <p id="hwSum" class="mt-1 text-sm font-medium text-ac"></p>
+    <p class="mt-2 text-xs text-mu">To run a GGUF model directly in the app (no Ollama), open the app, choose <b>In-app (wllama, GGUF)</b> as the provider, then click <b>Runtime</b>.</p>
   </section>
 
   <!-- 2. Recommendations: trending GGUF models on Hugging Face that fit your PC -->
@@ -54,6 +59,7 @@
 <script src="js/brand.js"></script>
 <script src="js/env.js"></script>
 <script src="js/config.js"></script>
+<script src="js/theme.js"></script>
 <script src="js/hw.js"></script>
 <script src="js/models.js"></script>
 </body>

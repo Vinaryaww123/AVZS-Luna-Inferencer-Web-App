@@ -23,7 +23,9 @@ async function* sse(r){
 
 /* Chat with streaming. on(text) is called whenever a text chunk arrives. */
 async function stream(p,m,msgs,sys,on,sig,web,temp,tools,st){ // tools: MCP tools (optional); st: collector object {calls} // temp: temperature (optional; omitted when empty)
-  const t=P[p].t;let u,b;
+  const t=P[p].t;
+  if(t=='ll'){await localChat(m,msgs,sys,on,sig,temp,tools,st);return} // in-app wllama runtime (js/local.js)
+  let u,b;
   // OpenAI-compatible: OpenAI, OpenRouter, Groq, Ollama, LM Studio, etc.
   if(t=='oa'){u=base(p)+'/chat/completions';b={model:m,stream:true,messages:sys?[{role:'system',content:sys},...msgs.map(oaMsg)]:msgs.map(oaMsg)}}
   // Anthropic Messages API (optional web search via tools)
@@ -53,6 +55,7 @@ async function stream(p,m,msgs,sys,on,sig,web,temp,tools,st){ // tools: MCP tool
 
 /* Model list from the provider */
 async function models(p){
+  if(P[p].t=='ll')return localModels(); // in-app runtime catalog (js/local.js)
   if(P[p].t=='a1')return(await(await chk(await fetch(base(p)+'/sdapi/v1/sd-models'))).json()).map(x=>x.title); // A1111 checkpoint
   const g=P[p].t=='go',r=await chk(await fetch(g?gu('/models?pageSize=200'):base(p)+'/models',{headers:hdr(p)})),j=await r.json();
   return g?j.models.map(x=>x.name.replace('models/','')):(j.data||[]).map(x=>x.id);
@@ -156,15 +159,16 @@ function geminiSchema(s){
   if(Array.isArray(o.type))o.type=o.type.find(x=>x!='null')||'string';
   return o;
 }
-async function agent(p,m,msgs,sys,on,sig,temp,tools,run){
-  const local=[...msgs],t=P[p].t;
-  for(let i=0;i<6;i++){
+async function agent(p,m,msgs,sys,on,sig,temp,tools,run,maxSteps=6,onStep){
+  const local=[...msgs],t=P[p].t,limit=Math.max(1,+maxSteps||6);
+  for(let i=0;i<limit;i++){
+    if(onStep)onStep(i,limit);
     const st={};let said='';
     await stream(p,m,local,sys,x=>{said+=x;on(x)},sig,false,temp,tools,st);
     if(!st.calls.length)return;
     const res=[];
     for(const c of st.calls)res.push(await run(c)); // sequential, so confirmations appear one at a time
-    if(t=='oa'){
+    if(t=='oa'||t=='ll'){
       local.push({native:{role:'assistant',content:said||null,tool_calls:st.calls.map(c=>({id:c.id,type:'function',function:{name:c.fn,arguments:JSON.stringify(c.args)}}))}});
       st.calls.forEach((c,k)=>local.push({native:{role:'tool',tool_call_id:c.id,content:res[k]}}));
     }else if(t=='an'){
@@ -175,5 +179,5 @@ async function agent(p,m,msgs,sys,on,sig,temp,tools,run){
       local.push({native:{role:'user',parts:st.calls.map((c,k)=>({functionResponse:{name:c.fn,response:{result:res[k]}}}))}});
     }
   }
-  on('\n\n(Stopped: reached the 6-round tool-use limit.)');
+  on(`\n\n(Stopped: reached the ${limit}-step tool-use limit.)`);
 }

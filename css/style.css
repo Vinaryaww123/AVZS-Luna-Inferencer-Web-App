@@ -1,3 +1,26 @@
-/* style.css — theme COLOR TOKENS (light and dark). Change the palette here; mapped to Tailwind color names in tailwind.config.js */
-:root{--bg:#eceff3;--sf:#fff;--tx:#141a22;--mu:#5f6b7a;--bd:#d5dbe3;--ac:#3f4fd8;--on:#fff;--cd:#e4e8ee;--er:#b42318;--tk-k:#6d28d9;--tk-s:#0f766e;--tk-n:#b45309}
-@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--sf:#161c25;--tx:#e6ebf2;--mu:#8b97a8;--bd:#273040;--ac:#8ea2ff;--on:#0b1020;--cd:#202938;--er:#ff8a80;--tk-k:#c4b5fd;--tk-s:#5eead4;--tk-n:#fcd34d}}
+/* style.css — theme COLOR TOKENS (light and dark), startup screen, and animated background.
+   Change the palette here; mapped to Tailwind color names in tailwind.config.js.
+   Default = system color mode and no animated background, so the original look is unchanged. */
+:root{--bg:#eceff3;--sf:#fff;--tx:#141a22;--mu:#5f6b7a;--bd:#d5dbe3;--ac:#3f4fd8;--on:#fff;--cd:#e4e8ee;--er:#b42318;--tk-k:#6d28d9;--tk-s:#0f766e;--tk-n:#b45309;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0d1117;--sf:#161c25;--tx:#e6ebf2;--mu:#8b97a8;--bd:#273040;--ac:#8ea2ff;--on:#0b1020;--cd:#202938;--er:#ff8a80;--tk-k:#c4b5fd;--tk-s:#5eead4;--tk-n:#fcd34d}}
+:root[data-theme=dark]{--bg:#0d1117;--sf:#161c25;--tx:#e6ebf2;--mu:#8b97a8;--bd:#273040;--ac:#8ea2ff;--on:#0b1020;--cd:#202938;--er:#ff8a80;--tk-k:#c4b5fd;--tk-s:#5eead4;--tk-n:#fcd34d;color-scheme:dark}
+:root[data-theme=light]{color-scheme:light}
+html{background:var(--bg)}
+
+/* Fixed canvas behind the page. It only appears when an effect is selected. */
+#fx{position:fixed;inset:0;width:100%;height:100%;z-index:-1;display:none;pointer-events:none}
+#fx.on{display:block}
+body.fx-on{background:transparent!important}
+
+/* Startup loading screen */
+#boot{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:var(--bg);transition:opacity .35s ease,visibility .35s ease}
+#boot.boot-done{opacity:0;visibility:hidden;pointer-events:none}
+.boot-card{display:grid;justify-items:center;gap:.65rem;width:min(320px,86vw);text-align:center}
+.boot-logo{width:56px;height:56px;animation:boot-pulse 1.6s ease-in-out infinite}
+.boot-name{font-size:16px;letter-spacing:-.01em}
+.boot-bar{width:100%;height:5px;overflow:hidden;border-radius:999px;background:var(--cd)}
+.boot-bar i{display:block;width:38%;height:100%;border-radius:999px;background:var(--ac);animation:boot-slide 1.25s ease-in-out infinite}
+.boot-text{font-size:12.5px;color:var(--mu)}
+@keyframes boot-pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.06);opacity:1}}
+@keyframes boot-slide{0%{transform:translateX(-110%)}100%{transform:translateX(310%)}}
+@media(prefers-reduced-motion:reduce){.boot-logo,.boot-bar i{animation:none}.boot-bar i{width:100%}}

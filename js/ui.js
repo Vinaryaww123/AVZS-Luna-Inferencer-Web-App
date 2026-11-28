@@ -38,9 +38,11 @@ const MODELS={};
 const mdl=$('#mdl'),mlist=$('#mlist');
 function closeMenu(){mlist.classList.add('hidden');mdl.setAttribute('aria-expanded','false')}
 function renderMenu(filter=''){
-  const all=MODELS[$('#prov').value]||[],q=filter.toLowerCase(),l=all.filter(x=>x.toLowerCase().includes(q));
+  const prov=$('#prov').value,all=MODELS[prov]||[],q=filter.toLowerCase();
+  const label=x=>typeof localModelLabel=='function'?localModelLabel(prov,x):x;
+  const l=all.filter(x=>(x+' '+label(x)).toLowerCase().includes(q));
   mlist.innerHTML=l.length
-    ?l.map(x=>`<div role="option" data-m="${esc(x)}" class="cursor-pointer break-all rounded-md px-2.5 py-1.5 hover:bg-cd ${x==mdl.value?'font-semibold text-ac':''}">${esc(x)}</div>`).join('')
+    ?l.map(x=>`<div role="option" data-m="${esc(x)}" class="cursor-pointer break-all rounded-md px-2.5 py-1.5 hover:bg-cd ${x==mdl.value?'font-semibold text-ac':''}">${esc(label(x))}</div>`).join('')
     :`<div class="px-2.5 py-1.5 text-sm text-mu">${all.length?'No matches. The name you typed is still used.':'Loading model list…'}</div>`;
   mlist.classList.remove('hidden');mdl.setAttribute('aria-expanded','true');
   mlist.querySelector('.text-ac')?.scrollIntoView({block:'nearest'});
@@ -81,18 +83,21 @@ const hasKey=p=>!!key(p);
 const attr=s=>esc(String(s)).replace(/"/g,'&quot;'); // safe for attributes
 function chip(p){const ok=hasKey(p);return`<span class="text-xs ${ok?'text-ac':'text-mu'}">${ok?'Key set':'Not set'}</span>`}
 function renderSettings(open){
-  for(const[id,g]of[['gCloud','cloud'],['gLocal','local'],['gMcp','mcp']])$('#'+id).classList.toggle('tab-on',setGroup==g);
+  for(const[id,g]of[['gCloud','cloud'],['gLocal','local'],['gMcp','mcp'],['gTheme','theme']])$('#'+id).classList.toggle('tab-on',setGroup==g);
+  if(setGroup=='theme')return renderTheme();
   if(setGroup=='mcp')return renderMcp();
   $('#pvs').innerHTML=ALL.filter(p=>!!P[p].loc==(setGroup=='local')).map(p=>{
-    const v=P[p],cloud=!v.loc;
+    const v=P[p],cloud=!v.loc,inapp=p=='inapp';
     return`<details data-d="${p}" class="group rounded-lg border border-bd bg-sf" ${p==open?'open':''}>
       <summary class="flex cursor-pointer items-center justify-between gap-2 px-3 py-2"><span class="font-medium">${v.n}</span>
         <span class="flex items-center gap-2">${cloud?chip(p):'<span class="text-xs text-mu">Local</span>'}<svg viewBox="0 0 24 24" class="h-4 w-4 text-mu transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
       <div class="grid gap-2 border-t border-bd p-3">
-        ${v.k?`<label class="grid gap-1 text-sm text-mu">API key<input type="password" class="field w-full text-tx" data-p="${p}" data-f="k" placeholder="Paste API key here" autocomplete="off" value="${attr(S.k[p]||'')}"></label>`:''}
-        <label class="grid gap-1 text-sm text-mu">${cloud?'Custom URL (optional)':'Server address'}<input class="field w-full text-tx" data-p="${p}" data-f="u" placeholder="${attr(v.url)}" value="${attr(S.u[p]||'')}"></label>
-        <div class="flex flex-wrap items-center gap-2"><button type="button" class="btn" data-test="${p}">Test connection</button><span class="text-sm" id="t-${p}"></span></div>
-        ${v.loc?'<p class="text-xs text-mu">If the connection fails, enable CORS on the server (Ollama: run with OLLAMA_ORIGINS="*"; LM Studio: Enable CORS).</p>':''}
+        ${inapp?`<p class="text-xs text-mu">Runs GGUF models directly in this app with wllama (WebAssembly, optional WebGPU). The model is downloaded once and cached in this browser; no API key, Ollama, or server is needed.</p>
+          <div class="flex flex-wrap items-center gap-2"><button type="button" class="btn" data-inapp>Open runtime</button><span class="text-xs text-mu">${esc(typeof localPing=='function'?localPing():'Runtime ready')}</span></div>`:`
+          ${v.k?`<label class="grid gap-1 text-sm text-mu">API key<input type="password" class="field w-full text-tx" data-p="${p}" data-f="k" placeholder="Paste API key here" autocomplete="off" value="${attr(S.k[p]||'')}"></label>`:''}
+          <label class="grid gap-1 text-sm text-mu">${cloud?'Custom URL (optional)':'Server address'}<input class="field w-full text-tx" data-p="${p}" data-f="u" placeholder="${attr(v.url)}" value="${attr(S.u[p]||'')}"></label>
+          <div class="flex flex-wrap items-center gap-2"><button type="button" class="btn" data-test="${p}">Test connection</button><span class="text-sm" id="t-${p}"></span></div>
+          ${v.loc?'<p class="text-xs text-mu">If the connection fails, enable CORS on the server (Ollama: run with OLLAMA_ORIGINS="*"; LM Studio: Enable CORS).</p>':''}`}
       </div></details>`;
   }).join('');
   $('#gCloud').classList.toggle('tab-on',setGroup=='cloud');$('#gLocal').classList.toggle('tab-on',setGroup=='local');
@@ -102,6 +107,7 @@ function openSettings(p){ // p (optional) = provider to open directly
   if(p){const d=$(`#pvs details[data-d=${p}]`);d?.scrollIntoView({block:'nearest'});d?.querySelector('input')?.focus()}
 }
 async function ping(p){ // connection test: fetch the model list (or the A1111 endpoint)
+  if(P[p].t=='ll')return typeof localPing=='function'?localPing():'In-app runtime ready';
   if(P[p].t=='a1'){const r=await fetch(base(p)+'/sdapi/v1/sd-models');if(!r.ok)throw new Error(r.status);return'Connected'}
   if(P[p].nolist)return hasKey(p)?'Key saved (this provider has no model list; type the model name manually)':'Enter the API key first';
   const l=await models(p);MODELS[p]=l;return`Connected · ${l.length} models`;
@@ -200,12 +206,13 @@ const coderSys=()=>{ // Coder tab system prompt from the selected presets
   const t=$('#task')?.value||'write',l=$('#lang')?.value,x=$('#sys')?.value.trim();
   return[CODER.base,CODER.tasks[t][1],l?`Language/stack: ${CODER.langs.find(a=>a[0]==l)[1]}.`:'',x].filter(Boolean).join('\n');
 };
-const sysFor=k=>k=='coder'?coderSys():$('#sys')?.value.trim();
+const sysFor=k=>k=='coder'?coderSys():k=='agent'?[AGENT.base,$('#sys')?.value.trim()].filter(Boolean).join('\n\n'):$('#sys')?.value.trim();
 const tempFor=k=>{const v=k=='coder'?$('#temp')?.value:'';return v?+v:undefined};
 function restoreCoder(){for(const id of['task','lang','temp']){const e=$('#'+id),v=S.cd?.[id];if(e&&v!=null)e.value=v}}
 $('#opt').addEventListener('change',e=>{
   if(e.target.id=='cfiles'){const fl=[...e.target.files];e.target.value='';addCode(fl)}
   else if(['task','lang','temp'].includes(e.target.id)){S.cd=S.cd||{};S.cd[e.target.id]=e.target.value;save()}
+  else if(e.target.id=='agentSteps'){S.ag=S.ag||{};S.ag.steps=+e.target.value||8;save()}
 });
 $('#opt').addEventListener('click',e=>{const i=e.target.dataset?.crm;if(i!=null){CF.splice(+i,1);renderCF()}});
 /* Code block buttons (delegated): copy, download, preview */
@@ -223,7 +230,7 @@ $('#prev').addEventListener('close',()=>{$('#prevFrame').srcdoc=''}); // stop pr
    Servers and tools come from mcp.json through server.py (/api/mcp/...). The browser only calls them; no commands are executed from here.
    S.mcp: {on: used in Chat/Coder, confirm: ask for confirmation (default: yes), off: {"server": true, "server/tool": true} = disabled}.
    Message flow: mcpEnabled() -> active tool list -> agent() in api.js -> mcpRun() runs each call (with confirmation). */
-const MCP={cache:{},tools:{},allow:new Set()}; // cache: server -> tools Promise | tools: server -> tools | allow: session permissions
+const MCP={cache:{},tools:{},allow:new Set(),reg:null,regQ:'',add:null,addCfg:null}; // cache: server -> tools Promise | tools: server -> tools | allow: session permissions
 const CHV='<svg viewBox="0 0 24 24" class="h-4 w-4 text-mu transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 const mcpServers=async()=>(await api('mcp/servers')).servers;
 const mcpInfo=async()=>await api('mcp/servers');
@@ -272,18 +279,105 @@ async function mcpRun(c,map,say){
   say(`\n\n${F3}tool\n${label}(${JSON.stringify(c.args).slice(0,300)})\n→ ${out.slice(0,1500).replace(/```/g,'` ` `')}\n${F3}\n\n`);
   return out.slice(0,20000);
 }
-/* Settings > MCP panel: server list from mcp.json, enable/disable, tool list */
+/* Settings > MCP panel: server list from mcp.json, enable/disable, tool list, and the official registry finder */
+const mcpSlug=s=>String(s||'server').toLowerCase().replace(/[^a-z0-9_.-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||'server';
+function mcpRegistryResults(list){
+  const box=$('#mcpFindRes');if(!box)return;
+  if(!list.length){box.innerHTML='<p class="text-sm text-mu">No servers found. Try another keyword.</p>';return}
+  box.innerHTML=list.map((s,i)=>{
+    const pkg=s.packages?.[0],rem=s.remotes?.[0];
+    const kind=pkg?`${pkg.registryType||'package'} · ${pkg.identifier}`:rem?`remote · ${rem.type||'http'}`:'no install package';
+    return`<div class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-bd p-2"><div class="min-w-0 flex-1"><b class="block text-sm">${esc(s.title||s.name)}</b><div class="text-xs text-mu">${esc((s.description||'').slice(0,220))}</div><div class="mt-0.5 break-all text-[11px] text-mu">${esc(kind)}</div></div>${pkg||rem?`<button type="button" class="btn px-2 py-1 text-xs" data-regadd="${i}">Add</button>`:'<span class="chip text-xs">Unsupported</span>'}</div>`;
+  }).join('');
+}
+async function mcpRegistrySearch(q){
+  const box=$('#mcpFindRes');if(!box)return;
+  MCP.regQ=q;box.innerHTML='<p class="text-sm text-mu">Searching the official registry…</p>';
+  try{const r=await api('mcp/registry',{q});MCP.reg=r.servers||[];mcpRegistryResults(MCP.reg)}
+  catch(e){box.innerHTML=`<p class="text-sm text-er">Registry search failed: ${esc(e.message)}</p>`}
+}
+function mcpAddOpen(s){
+  MCP.add=s;
+  const pkg=s.packages?.[0],rem=s.remotes?.[0];
+  $('#mcpAddDesc').textContent=(s.description||'').slice(0,400);
+  $('#mcpAddName').value=mcpSlug(String(s.title||s.name||'').split('/').pop());
+  let fields='';
+  if(pkg){
+    const rt=(pkg.registryType||'').toLowerCase(),hint=(pkg.runtimeHint||'').toLowerCase();
+    const cmd=hint||(rt=='npm'?'npx':rt=='pypi'?'uvx':rt=='oci'?'docker':'');
+    const args=(pkg.runtimeArguments||[]).filter(a=>a&&a.value!=null).map(a=>String(a.value));
+    if(rt=='npm'&&cmd=='npx'&&!args.includes('-y'))args.unshift('-y');
+    if(rt=='oci'){
+      if(!args.includes('run'))args.unshift('run');
+      if(!args.includes('-i'))args.push('-i');
+      if(!args.includes('--rm'))args.push('--rm');
+    }
+    args.push(pkg.identifier);
+    for(const a of pkg.packageArguments||[])if(a&&a.value!=null)args.push(String(a.value));
+    MCP.addCfg={command:cmd,args};
+    fields=`<p class="text-xs text-mu">Package: <code>${esc(pkg.identifier)}</code>${pkg.version?' · '+esc(pkg.version):''} · ${esc(cmd||'no runtime')}</p>`;
+    for(const v of (pkg.environmentVariables||[]).filter(x=>x&&x.name))
+      fields+=`<label class="grid gap-1 text-xs text-mu">${esc(v.name)}${v.isRequired?' *':''}<input data-env="${attr(v.name)}" type="${v.isSecret?'password':'text'}" class="field w-full text-sm text-tx" placeholder="${attr(v.description||'')}" autocomplete="off"><span class="text-[11px]">${esc(v.description||'')}</span></label>`;
+  }else if(rem){
+    MCP.addCfg={url:rem.url,headers:{}};
+    fields=`<p class="text-xs text-mu">Remote: <code class="break-all">${esc(rem.url)}</code> (${esc(rem.type||'http')})</p>`;
+    for(const h of (rem.headers||[]).filter(x=>x&&x.name))
+      fields+=`<label class="grid gap-1 text-xs text-mu">Header ${esc(h.name)}${h.isRequired?' *':''}<input data-hdr="${attr(h.name)}" type="${h.isSecret?'password':'text'}" class="field w-full text-sm text-tx" autocomplete="off"><span class="text-[11px]">${esc(h.description||'')}</span></label>`;
+  }
+  $('#mcpAddFields').innerHTML=fields||'<p class="text-sm text-mu">This entry has no install details.</p>';
+  $('#mcpAddWarn').classList.add('hidden');$('#mcpAddWarn').textContent='';
+  mcpAddPreview();
+  $('#mcpAdd').showModal();
+}
+function mcpAddCfg(){
+  const s=MCP.add;if(!s)return null;
+  const pkg=s.packages?.[0],rem=s.remotes?.[0];let cfg;
+  if(pkg&&MCP.addCfg?.command)cfg={command:MCP.addCfg.command,args:[...MCP.addCfg.args]};
+  else if(rem)cfg={url:rem.url,headers:{}};
+  else return null;
+  const env={};document.querySelectorAll('#mcpAddFields [data-env]').forEach(e=>{const v=e.value.trim();if(v)env[e.dataset.env]=v});
+  if(Object.keys(env).length)cfg.env=env;
+  const hdr={};document.querySelectorAll('#mcpAddFields [data-hdr]').forEach(e=>{const v=e.value.trim();if(v)hdr[e.dataset.hdr]=v});
+  if(Object.keys(hdr).length)cfg.headers=hdr;
+  return{name:($('#mcpAddName').value||'').trim(),config:cfg};
+}
+function mcpAddPreview(){
+  const x=mcpAddCfg();if(!x)return;
+  $('#mcpAddCfg').textContent=JSON.stringify({mcpServers:{[x.name||'server']:x.config}},null,2);
+}
+async function mcpAddSave(){
+  const x=mcpAddCfg(),warn=$('#mcpAddWarn');
+  const bad=m=>{warn.textContent=m;warn.classList.remove('hidden')};
+  if(!x)return bad('This entry cannot be added automatically.');
+  if(!/^[A-Za-z0-9_.-]{1,40}$/.test(x.name))return bad('Server name: 1-40 letters, numbers, dots, dashes, or underscores.');
+  try{
+    await api('mcp/add',x);
+    $('#mcpAdd').close();
+    MCP.cache={};MCP.tools={};
+    await renderMcp();
+    if(MCP.reg)mcpRegistryResults(MCP.reg);
+    updateMcpCount();
+  }catch(e){bad(e.message)}
+}
 async function renderMcp(){
   const box=$('#pvs');box.innerHTML='<p class="text-sm text-mu">Loading…</p>';let sv,info;
   try{info=await mcpInfo();sv=info.servers}catch(e){box.innerHTML=`<p class="text-sm text-mu">MCP needs a local server. Run <code>python server.py</code>, then open the app at http://localhost:3000 (error: ${esc(e.message)}).</p>`;return}
   const off=S.mcp?.off||{};
   const fileHint=info.file?`<p class="text-xs text-mu">Configuration file: <code class="break-all">${esc(info.file)}</code></p>`:'';
+  const finder=`<details class="rounded-lg border border-bd bg-sf" ${sv.length?'':'open'}>
+    <summary class="flex cursor-pointer items-center justify-between gap-2 px-3 py-2"><span class="font-medium">Find MCP servers</span><span class="text-xs text-mu">Official registry</span></summary>
+    <div class="grid gap-2 border-t border-bd p-3">
+      <div class="flex flex-wrap gap-2"><input id="mcpFind" class="field min-w-[180px] flex-1 text-sm text-tx" placeholder="Search, e.g. filesystem, github, database" autocomplete="off" value="${attr(MCP.regQ||'')}"><button type="button" class="btn text-sm" id="mcpFindGo">Search</button></div>
+      <div id="mcpFindRes" class="grid gap-1.5"><p class="text-xs text-mu">Search the official Model Context Protocol registry. Add a server with one click; required environment variables can be filled in first.</p></div>
+    </div></details>`;
   box.innerHTML=fileHint+`<label class="flex items-center gap-1.5 text-sm"><input id="mcpConfirm" type="checkbox" class="accent-ac" ${S.mcp?.confirm===false?'':'checked'}> Ask for confirmation before running tools</label>`
+    +finder
     +(sv.length?sv.map(s=>`<details class="group rounded-lg border border-bd bg-sf"><summary class="flex cursor-pointer items-center justify-between gap-2 px-3 py-2"><span class="font-medium">${esc(s.name)}</span><span class="flex items-center gap-2"><span class="text-xs text-mu">${s.type}${s.ready?' · active':''}</span>${CHV}</span></summary>
       <div class="grid gap-2 border-t border-bd p-3"><label class="flex items-center gap-1.5 text-sm"><input type="checkbox" data-moff="${attr(s.name)}" class="accent-ac" ${off[s.name]?'':'checked'}> Use this server</label>
       <div data-tl class="grid gap-1"></div><div class="flex flex-wrap items-center gap-2"><button type="button" class="btn text-sm" data-mload="${attr(s.name)}">Load tools</button><span class="text-sm text-mu" data-mst></span></div></div></details>`).join('')
-      :`<p class="text-sm text-mu">No MCP servers yet. ${info.file?'Edit the configuration file above':'Copy <code>mcp.example.json</code> to <code>mcp.json</code>'}, add the servers you want, then press Reload.</p>`)
+      :`<p class="text-sm text-mu">No MCP servers yet. Use the finder above, or edit the configuration file manually.</p>`)
     +'<div><button type="button" class="btn text-sm" id="mcpReload">Reload mcp.json</button></div>';
+  if(MCP.reg)mcpRegistryResults(MCP.reg);
 }
 async function mcpShowTools(name,det){
   const st=det.querySelector('[data-mst]'),tl=det.querySelector('[data-tl]'),off=S.mcp?.off||{};
@@ -296,11 +390,18 @@ async function mcpShowTools(name,det){
 }
 function restoreMcp(){const e=$('#mcpOn');if(e){e.checked=!!S.mcp?.on;updateMcpCount()}}
 $('#gMcp').onclick=()=>{setGroup='mcp';renderSettings()};
+$('#gTheme').onclick=()=>{setGroup='theme';renderSettings()};
 $('#pvs').addEventListener('click',async e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.mload)mcpShowTools(b.dataset.mload,b.closest('details'));
+  else if(b.id=='mcpFindGo')mcpRegistrySearch($('#mcpFind').value.trim());
+  else if(b.dataset.regadd!=null){const s=MCP.reg?.[+b.dataset.regadd];if(s)mcpAddOpen(s)}
   else if(b.id=='mcpReload'){b.textContent='Loading…';try{await api('mcp/reload',{})}catch{}MCP.cache={};MCP.tools={};renderMcp()}
 });
+$('#pvs').addEventListener('keydown',e=>{if(e.key=='Enter'&&e.target.id=='mcpFind'){e.preventDefault();mcpRegistrySearch(e.target.value.trim())}});
+$('#mcpAddCancel').onclick=()=>$('#mcpAdd').close();
+$('#mcpAdd').addEventListener('input',mcpAddPreview);
+$('#mcpAddGo').onclick=mcpAddSave;
 $('#pvs').addEventListener('change',e=>{
   const t=e.target;S.mcp=S.mcp||{};
   if(t.id=='mcpConfirm'){S.mcp.confirm=t.checked;save()}
@@ -363,11 +464,15 @@ function setMode(k){
   const ps=M[k].ps;fillProv(k);
   const s=S.m[k]||envDef(k)||{};$('#prov').value=ps.includes(s.p)?s.p:ps[0];
   $('#in').placeholder=M[k].ph;$('#opt').innerHTML=OPT[k];renderThumbs();renderCF();restoreCoder();restoreMcp();$('#in').classList.toggle('font-mono',k=='coder');
+  if(k=='agent'){const e=$('#agentSteps');if(e)e.value=String(S.ag?.steps||8)}
   setProv();
+  if(typeof sessEnsureMode=='function')sessEnsureMode(k);
 }
 function setProv(){
   const p=$('#prov').value,s=S.m[mode]||envDef(mode)||{};
   $('#mdl').value=s.p==p?s.m||'':(DM[mode]?.[p]||'');
+  $('#rt')?.classList.toggle('hidden',p!='inapp');
+  if(p=='inapp'&&!MODELS[p])loadModels(); // the in-app catalog is local, so no network call
   renderGen(); // advanced settings panel follows the provider
   closeMenu();
 }
@@ -407,12 +512,20 @@ async function send(opt){ // opt.regen = resend the last prompt
   const o=add(k,'','<span class="dots"><i></i><i></i><i></i></span>'),pt=o._pt=makePainter(o); // animated dots until the first token arrives
  let acc='';
   try{
-    if(H[k]){ // chat and multimodal: conversation history
+    if(H[k]){ // chat, coder, agent, and multimodal: conversation history
       H[k].push(last[k].um={role:'user',content:cq,images:imgs});
-      const say=x=>{acc+=x;pt.set(acc)},tl=(k=='chat'||k=='coder')&&$('#mcpOn')?.checked?await mcpEnabled(say):null; // MCP tools enabled?
-      if(tl?.list.length)await agent(p,m,H[k],sysFor(k),say,sig,tempFor(k),tl.list,c=>mcpRun(c,tl.map,say));
+      if(typeof sessSave=='function')sessSave(k);
+      const say=x=>{acc+=x;pt.set(acc)};
+      const wantsTools=['chat','coder','agent'].includes(k)&&$('#mcpOn')?.checked; // MCP tools enabled?
+      const tl=wantsTools?await mcpEnabled(say):null;
+      if(k=='agent'){
+        const steps=+($('#agentSteps')?.value||S.ag?.steps||8);
+        const onStep=(i,n)=>{if(!acc)o.innerHTML=`<span class="text-sm text-mu">Agent working · step ${i+1} of ${n}…</span>`};
+        await agent(p,m,H[k],sysFor(k),say,sig,tempFor(k),tl?.list||[],c=>tl?mcpRun(c,tl.map,say):'No tools are enabled.',steps,onStep);
+      }else if(tl?.list.length)await agent(p,m,H[k],sysFor(k),say,sig,tempFor(k),tl.list,c=>mcpRun(c,tl.map,say));
       else await stream(p,m,H[k],sysFor(k),say,sig,false,tempFor(k));
       H[k].push({role:'assistant',content:acc});
+      if(typeof sessSave=='function')sessSave(k);
     }else if(k=='research'){
       await research(p,m,q,o,sig);
     }else if(k=='image'){
@@ -430,6 +543,7 @@ async function send(opt){ // opt.regen = resend the last prompt
     else{o.className+=' msg-e';o.textContent=e.message+(/Failed to fetch/.test(e.message)?' — check the connection, API key, or the provider\'s CORS settings.':'');if(H[k])H[k].pop()}
   }
   addActs(o,k);
+  if(typeof sessSave=='function')sessSave(k);
   busy=null;$('#go').textContent='Send';jump.classList.add('hidden');
 }
 
@@ -437,7 +551,7 @@ async function send(opt){ // opt.regen = resend the last prompt
 $('#nav').innerHTML=Object.keys(M).map(k=>`<button data-k="${k}" class="tab flex-1 whitespace-nowrap">${M[k].n}</button>`).join('');
 $('#main').innerHTML=Object.keys(M).map(k=>`<div class="log hidden flex-col gap-2.5" data-k="${k}"><div class="empty mx-auto mt-[10vh] max-w-md px-3 text-center"><img data-brand="logo" alt="" class="mx-auto mb-3 h-12 w-12 opacity-80"><p class="text-mu">${EMPTY[k]}</p></div></div>`).join('');
 applyBrand(); // apply the logo to the empty states (created after brand.js ran)
-$('#nav').onclick=e=>{const k=e.target.dataset?.k;if(k){persist();setMode(k)}};
+$('#nav').onclick=e=>{const k=e.target.dataset?.k;if(k){if(typeof sessSave=='function')sessSave(mode);persist();setMode(k)}};
 $('#prov').onchange=()=>{setProv();persist()};
 /* Model picker: open, filter, choose, close */
 const openMenu=()=>{renderMenu();if(!MODELS[$('#prov').value])loadModels()}; // load automatically if no list yet
@@ -453,6 +567,7 @@ mlist.onmousedown=e=>{ // mousedown (not click) so it runs before the field lose
   mdl.value=m;persist();closeMenu();
 };
 $('#ld').onclick=()=>loadModels($('#ld'));
+$('#rt').onclick=()=>openRuntime();
 $('#go').onclick=send;
 $('#in').onkeydown=e=>{if(e.key=='Enter'&&!e.shiftKey){e.preventDefault();send()}};
 $('#in').oninput=e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'};
@@ -463,7 +578,9 @@ $('#pvs').oninput=e=>{
   if(d.f=='k'){const c=e.target.closest('details').querySelector('summary span.text-xs');c.outerHTML=chip(d.p)} // update status
 };
 $('#pvs').addEventListener('click',async e=>{
-  const p=e.target.dataset?.test;if(!p)return;
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.inapp!=null){$('#dlg').close();openRuntime();return}
+  const p=b.dataset.test;if(!p)return;
   const out=$('#t-'+p),set=(t,c)=>{out.textContent=t;out.className='text-sm '+c};
   set('Testing…','text-mu');
   try{set(await ping(p),'text-ac')}
@@ -481,4 +598,16 @@ $('#logoFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new F
 $('#logoReset').onclick=()=>{localStorage.removeItem(LOGO_KEY);applyBrand()};
 $('#cfg').onclick=()=>openSettings();
 $('#cl').onclick=()=>$('#dlg').close();
+if(typeof sessInit=='function')sessInit(); // load local sessions before the first tab is shown
 setMode('chat');
+
+/* Hide the startup loading screen once the app shell is ready. The timeout is a safety net. */
+let bootHidden=false;
+function bootDone(){
+  if(bootHidden)return;bootHidden=true;
+  const b=$('#boot');if(!b)return;
+  b.classList.add('boot-done');setTimeout(()=>b.remove(),450);
+}
+requestAnimationFrame(bootDone);
+window.addEventListener('load',bootDone);
+setTimeout(bootDone,7000);

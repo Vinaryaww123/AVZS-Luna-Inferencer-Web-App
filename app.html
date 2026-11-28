@@ -6,13 +6,22 @@
 <title>AVZS Luna Inferencer</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/app.css"> <!-- Tailwind build output: python scripts/build.py css -->
+<script>
+/* Apply a saved color mode/accent before the first paint. Default (no theme settings) is untouched. */
+try{const t=(JSON.parse(localStorage.getItem('studio-ai.v1')||'{}').theme||{});if(t.mode==='light'||t.mode==='dark')document.documentElement.dataset.theme=t.mode;if(t.accent){document.documentElement.style.setProperty('--ac',t.accent);const n=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(t.accent);if(n){const r=parseInt(n[1],16),g=parseInt(n[2],16),b=parseInt(n[3],16);document.documentElement.style.setProperty('--on',(0.299*r+0.587*g+0.114*b)>150?'#0b1020':'#fff')}}}catch(e){}
+</script>
 </head>
 <body class="mx-auto flex h-dvh max-w-4xl flex-col bg-bg font-sans text-[15px] leading-relaxed text-tx">
+<!-- Startup loading screen: hidden by ui.js after the app is ready. -->
+<div id="boot" role="status" aria-live="polite"><div class="boot-card"><img data-brand="logo" alt="" class="boot-logo"><b data-brand="name" class="boot-name"></b><div class="boot-bar"><i></i></div><p class="boot-text">Preparing your workspace…</p></div></div>
+<noscript><style>#boot{display:none}</style></noscript>
 <!-- Top bar: left = brand, right = actions (icons only on small screens, icon + text on wide screens) -->
 <header class="flex flex-wrap items-center gap-2 px-3.5 pb-1 pt-3">
   <a href="index.html" class="hbtn" title="Back to main menu" aria-label="Back to main menu"><svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span class="hidden lg:inline">Main menu</span></a>
   <a href="index.html" class="mr-auto flex items-center gap-2 px-1" title="Home"><img data-brand="logo" alt="" class="h-7 w-7"><h1 data-brand="name" class="text-[17px] font-semibold tracking-tight"></h1></a>
   <a href="models.html" class="hbtn" title="PC specifications and local models" aria-label="Local models"><svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg><span class="hidden lg:inline">Local models</span></a>
+  <button id="sesBtn" type="button" class="hbtn" title="Sessions" aria-label="Sessions"><svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg><span class="hidden xl:inline">Sessions</span></button>
+  <button id="ctxBtn" type="button" class="hbtn" title="Context view" aria-label="Context view"><svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h6"/></svg><span class="hidden xl:inline">Context</span></button>
   <button id="tourBtn" type="button" class="hbtn" title="Tutorial" aria-label="Tutorial"><svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg><span class="hidden lg:inline">Tutorial</span></button>
   <button id="acct" type="button" class="btn h-9 max-w-[11rem] truncate px-3" title="Account">Sign in</button>
   <button id="cfg" type="button" class="hbtn" title="Provider settings and keys" aria-label="Settings"><svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span class="hidden lg:inline">Settings</span></button>
@@ -26,6 +35,7 @@
     <div id="mlist" role="listbox" class="absolute left-0 right-0 top-full z-20 mt-1 hidden max-h-64 overflow-auto rounded-lg border border-bd bg-sf p-1 shadow-lg"></div>
   </div>
   <button id="ld" class="btn" title="Load the model list from the provider">Load models</button>
+  <button id="rt" class="btn hidden" title="Load and configure models for the in-app runtime">Runtime</button>
 </div>
 <main id="main" class="min-h-0 flex-1 overflow-auto px-3.5 py-1.5"></main>
 <button id="jump" class="btn btn-pri fixed bottom-32 right-5 hidden rounded-full px-3 py-1 text-sm shadow-lg">Jump to bottom</button>
@@ -47,7 +57,7 @@
 
 <dialog id="dlg" class="m-auto max-h-[90dvh] w-[min(560px,94vw)] overflow-auto rounded-2xl border border-bd bg-sf p-4 text-tx backdrop:bg-black/50">
   <h3 class="text-base font-semibold">Providers and keys</h3>
-  <div class="mt-2 flex gap-1"><button id="gCloud" type="button" class="tab tab-on">Cloud</button><button id="gLocal" type="button" class="tab">Local</button><button id="gMcp" type="button" class="tab">MCP</button></div>
+  <div class="mt-2 flex flex-wrap gap-1"><button id="gCloud" type="button" class="tab tab-on">Cloud</button><button id="gLocal" type="button" class="tab">Local</button><button id="gMcp" type="button" class="tab">MCP</button><button id="gTheme" type="button" class="tab">Appearance</button></div>
   <div id="pvs" class="mt-2 grid gap-1.5"></div>
   <div class="mt-2 grid gap-1.5 border-t border-bd pt-2.5"><b class="font-semibold">Logo</b><label class="filebtn w-fit"><svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>Choose logo<input type="file" id="logoFile" accept="image/*" class="sr-only"></label><button id="logoReset" class="btn w-fit">Restore default logo</button></div>
   <p class="mt-2 text-[12.5px] text-mu">API keys are stored in this browser (and in your account if you are signed in) and sent directly to the provider.</p>
@@ -66,13 +76,68 @@
   <div class="mt-3 flex flex-wrap justify-end gap-2"><button type="button" class="btn" data-r="deny">Deny</button><button type="button" class="btn" data-r="always">Allow for session</button><button type="button" class="btn btn-pri" data-r="allow">Allow</button></div>
 </dialog>
 
-<!-- Order matters: brand -> env -> config -> auth -> api -> ui -> tour -->
+<dialog id="sesDlg" class="m-auto max-h-[88dvh] w-[min(620px,94vw)] overflow-auto rounded-2xl border border-bd bg-sf p-4 text-tx backdrop:bg-black/50">
+  <div class="flex items-center justify-between gap-2"><h3 class="text-base font-semibold">Sessions</h3><button id="sesClose" type="button" class="btn px-2 py-1 text-sm">Close</button></div>
+  <p class="mt-1 text-xs text-mu">Sessions are stored in this browser only. Each tab keeps its own current session.</p>
+  <div class="mt-2 flex flex-wrap gap-2"><button id="sesNew" type="button" class="btn btn-pri text-sm">New session</button><button id="sesExport" type="button" class="btn text-sm">Export all</button></div>
+  <div id="sesList" class="mt-3 grid gap-1.5"></div>
+</dialog>
+
+<dialog id="ctxDlg" class="m-auto max-h-[88dvh] w-[min(720px,96vw)] overflow-auto rounded-2xl border border-bd bg-sf p-4 text-tx backdrop:bg-black/50">
+  <div class="flex items-center justify-between gap-2"><h3 class="text-base font-semibold">Context view</h3><button id="ctxClose" type="button" class="btn px-2 py-1 text-sm">Close</button></div>
+  <p class="mt-1 text-xs text-mu">What the model will see in the current tab: system prompt, messages, and an estimated token count.</p>
+  <div id="ctxBody" class="mt-3"></div>
+</dialog>
+
+<dialog id="inappDlg" class="m-auto max-h-[92dvh] w-[min(760px,96vw)] overflow-auto rounded-2xl border border-bd bg-sf p-4 text-tx backdrop:bg-black/50">
+  <div class="flex items-center justify-between gap-2"><h3 class="text-base font-semibold">In-app model runtime</h3><button id="rtClose" type="button" class="btn px-2 py-1 text-sm">Close</button></div>
+  <p class="mt-1 text-xs text-mu">Runs GGUF models inside this app with wllama (WebAssembly, optional WebGPU). The model is downloaded once and cached in this browser. No Ollama or server is needed.</p>
+  <div id="rtStatus" class="mt-2"></div>
+  <section class="mt-3">
+    <h4 class="text-sm font-semibold">Model catalog</h4>
+    <p class="text-xs text-mu">Small Q4 models are a good starting point. Larger models need more RAM and take longer to download.</p>
+    <div id="rtModels" class="mt-1.5 grid gap-1.5"></div>
+  </section>
+  <details class="mt-3 rounded-lg border border-bd p-3">
+    <summary class="cursor-pointer text-sm font-semibold">Custom GGUF</summary>
+    <div class="mt-2 grid gap-2">
+      <label class="grid gap-1 text-xs text-mu">Hugging Face repo<input id="rtRepo" class="field w-full text-sm text-tx" placeholder="e.g. bartowski/Qwen2.5-1.5B-Instruct-GGUF" autocomplete="off"></label>
+      <label class="grid gap-1 text-xs text-mu">GGUF file path in the repo<input id="rtGguf" class="field w-full text-sm text-tx" placeholder="e.g. Qwen2.5-1.5B-Instruct-Q4_K_M.gguf" autocomplete="off"></label>
+      <div class="flex flex-wrap items-center gap-2"><button id="rtLoadHF" type="button" class="btn text-sm">Load from Hugging Face</button><span class="text-xs text-mu">Leave the file empty to use Q4_K_M automatically.</span></div>
+      <label class="filebtn w-fit text-sm" title="Load a GGUF file from this computer without downloading it again">Choose a local .gguf<input id="rtFile" type="file" accept=".gguf,application/octet-stream" class="sr-only"></label>
+    </div>
+  </details>
+  <details class="mt-2 rounded-lg border border-bd p-3" open>
+    <summary class="cursor-pointer text-sm font-semibold">Advanced runtime settings</summary>
+    <p class="mt-1 text-xs text-mu">KV cache, batch sizes, context, GPU layers, and sampling. Defaults are conservative.</p>
+    <div id="rtCfg" class="mt-2 grid gap-2 sm:grid-cols-2"></div>
+    <p id="rtHint" class="mt-1 text-xs text-mu"></p>
+  </details>
+  <div class="mt-3 flex flex-wrap gap-2"><button id="rtUnload" type="button" class="btn text-sm">Unload model</button><button id="rtClear" type="button" class="btn text-sm">Clear cached models</button></div>
+  <p class="mt-2 text-xs text-mu">First load can take a while and may use several GB of disk. If loading fails, try a smaller model, a smaller context, or CPU-only mode (GPU layers 0).</p>
+</dialog>
+
+<dialog id="mcpAdd" class="m-auto max-h-[90dvh] w-[min(560px,94vw)] overflow-auto rounded-2xl border border-bd bg-sf p-4 text-tx backdrop:bg-black/50">
+  <h3 class="text-base font-semibold">Add MCP server</h3>
+  <p id="mcpAddDesc" class="mt-1 text-sm text-mu"></p>
+  <label class="mt-2 grid gap-1 text-xs text-mu">Server name<input id="mcpAddName" class="field w-full text-sm text-tx" autocomplete="off"></label>
+  <div id="mcpAddFields" class="mt-2 grid gap-2"></div>
+  <p id="mcpAddWarn" class="mt-2 hidden text-xs text-er"></p>
+  <pre id="mcpAddCfg" class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-cd p-2 text-[11px]"></pre>
+  <div class="mt-3 flex justify-end gap-2"><button id="mcpAddCancel" type="button" class="btn">Cancel</button><button id="mcpAddGo" type="button" class="btn btn-pri">Add server</button></div>
+</dialog>
+
+<!-- Order matters: brand -> env -> config -> auth -> local runtime -> api -> theme -> sessions -> ui -> tour -->
 <script src="js/brand.js"></script>
 <script src="js/env.js"></script>
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/local.js"></script>
 <script src="js/api.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/sessions.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/tour.js"></script>
+<script>setTimeout(function(){var b=document.getElementById('boot');if(b&&!b.classList.contains('boot-done'))b.classList.add('boot-done')},9000)</script>
 </body>
 </html>

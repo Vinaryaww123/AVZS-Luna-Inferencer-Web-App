@@ -5,9 +5,10 @@ AVZS Luna Inferencer can run as a normal desktop application: a native window
 fixed loopback port (47653). No browser tab, no terminal, and no account is
 required.
 
-The desktop build keeps the full app: all AI tabs, Local Models, settings, and
-MCP tools. Accounts and settings sync stay available in the web server version;
-the desktop app stores its settings in the window profile instead.
+The desktop build keeps the full app: all AI tabs (including Agent), Local Models,
+settings, MCP tools, sessions, themes, and the in-app GGUF runtime. Accounts and
+settings sync stay available in the web server version; the desktop app stores its
+settings in the window profile instead.
 
 ---
 
@@ -72,7 +73,8 @@ provider keys in Settings, and the keys stay in that user's app profile.
 | --- | --- |
 | Account database (only if you use accounts; not needed by the desktop app) | `<data>/db.json` |
 | MCP configuration | `<data>/mcp.json` |
-| Window cookies/localStorage | `<data>/webview/` |
+| Window cookies/localStorage/sessions | `<data>/webview/` |
+| In-app GGUF model cache (OPFS) | `<data>/webview/` (can grow by several GB) |
 | Startup log | `<data>/desktop.log` |
 
 `<data>` is:
@@ -96,13 +98,35 @@ Delete it to reset the app completely.
 
 ---
 
+## In-app GGUF models
+
+The desktop app can run GGUF models directly inside the window, without Ollama or
+LM Studio:
+
+1. Open the app and choose **In-app (wllama, GGUF)** as the provider.
+2. Click **Runtime**, choose a catalog model (or enter a Hugging Face repo / local
+   `.gguf` file), then click **Load**.
+3. The first load downloads the model from Hugging Face. It is cached in the
+   WebView profile, so later launches load it from disk.
+4. Adjust context, KV cache, batch, GPU layers, and sampling in the same dialog.
+   Reload the model after changing load-time settings.
+
+CPU inference works on all platforms. WebGPU depends on the WebView engine and
+graphics driver (Edge WebView2 on Windows); if loading fails with GPU layers above
+0, set **GPU layers** back to `0`. The model cache lives under `<data>/webview/`
+and can grow by several GB per model. Deleting the cache (or the `webview` folder)
+removes the downloaded models.
+
+---
+
 ## MCP tools in the desktop app
 
 The first launch copies `mcp.example.json` to `<data>/mcp.json` and copies the
 example server to `<data>/scripts/mcp_demo.py`. Open **Settings → MCP** in the
 app to see the exact configuration path.
 
-1. Edit `<data>/mcp.json` with any text editor.
+1. Edit `<data>/mcp.json` with any text editor, **or** use **Find MCP servers** in
+   Settings → MCP to search the official registry and add one with a click.
 2. Add the servers you trust (same format as Claude Desktop).
 3. Press **Reload mcp.json** in Settings → MCP.
 

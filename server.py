@@ -27,7 +27,7 @@ The db.json format matches the old Node.js version, so existing accounts keep wo
 import atexit, hashlib, hmac, json, os, platform, re, secrets, shutil, signal, subprocess, sys, threading, time, traceback, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, urlencode
 
 ROOT = Path(os.environ.get('LUNA_ROOT') or Path(__file__).resolve().parent).resolve()
 PORT = int(os.environ.get('PORT', 3000))
@@ -250,6 +250,96 @@ def mcp_get(name):
         c = mcp_clients[name] = McpClient(name, cfg)
     return c
 
+# ---------- MCP finder: official registry proxy + validated "add server" ----------
+# The registry (registry.modelcontextprotocol.io) is public. Results are normalized so the browser
+# only needs name/description/packages/remotes. The add endpoint only writes mcp.json; it never runs a command.
+MCP_REGISTRY = 'https://registry.modelcontextprotocol.io/v0.1/servers'
+MCP_COMMANDS = {'npx', 'npx.cmd', 'uvx', 'uvx.exe', 'python', 'python3', 'node', 'node.exe',
+                'docker', 'docker.exe', 'deno', 'deno.exe', 'bunx', 'uv', 'pipx'}
+_registry_cache, _registry_lock = {}, threading.Lock()
+mcp_file_lock = threading.Lock()
+
+def mcp_registry(query):
+    q = str(query or '').strip()[:100]
+    now = time.time()
+    with _registry_lock:
+        hit = _registry_cache.get(q)
+        if hit and hit[0] > now: return hit[1]
+    url = MCP_REGISTRY + '?' + urlencode({'search': q, 'version': 'latest', 'limit': 20})
+    req = urllib.request.Request(url, headers={'User-Agent': 'AVZS-Luna-Inferencer/1.0', 'Accept': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r: data = json.loads(r.read())
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise McpError(f'Registry unavailable: {e}')
+    out = []
+    for item in data.get('servers') or []:
+        s = item.get('server') or {}
+        packages = []
+        for p in s.get('packages') or []:
+            if not isinstance(p, dict): continue
+            packages.append({
+                'registryType': p.get('registryType') or '', 'identifier': p.get('identifier') or '',
+                'version': p.get('version') or '', 'runtimeHint': p.get('runtimeHint') or '',
+                'transport': p.get('transport') or {}, 'runtimeArguments': p.get('runtimeArguments') or [],
+                'packageArguments': p.get('packageArguments') or [],
+                'environmentVariables': [{k: e.get(k) for k in ('name', 'description', 'isRequired', 'isSecret') if e.get(k) is not None}
+                                         for e in p.get('environmentVariables') or [] if isinstance(e, dict)]})
+        remotes = []
+        for r in s.get('remotes') or []:
+            if not isinstance(r, dict): continue
+            if str(r.get('type') or '').lower() not in ('streamable-http', 'http'): continue  # SSE-only is not supported
+            remotes.append({'type': r.get('type'), 'url': r.get('url') or '',
+                            'headers': [{k: h.get(k) for k in ('name', 'description', 'isRequired', 'isSecret') if h.get(k) is not None}
+                                        for h in r.get('headers') or [] if isinstance(h, dict)]})
+        out.append({'name': s.get('name') or '', 'title': s.get('title') or s.get('name') or '',
+                    'description': s.get('description') or '', 'version': s.get('version') or '',
+                    'repository': (s.get('repository') or {}).get('url') or '',
+                    'packages': packages, 'remotes': remotes})
+    with _registry_lock: _registry_cache[q] = (now + 300, out)
+    return out
+
+def mcp_add(body):
+    """Validate one server from the finder and append it to mcp.json atomically."""
+    name = str(body.get('name') or '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9_.-]{1,40}', name): raise ApiError(400, 'Invalid server name.')
+    cfg = body.get('config')
+    if not isinstance(cfg, dict): raise ApiError(400, 'config must be an object')
+    out = {}
+    if cfg.get('url'):
+        u = str(cfg['url'])[:2000]; p = urlparse(u)
+        if p.scheme not in ('http', 'https') or not p.netloc: raise ApiError(400, 'URL must start with http:// or https://.')
+        out['url'] = u
+        hdr = cfg.get('headers')
+        if hdr is not None:
+            if not isinstance(hdr, dict): raise ApiError(400, 'headers must be an object')
+            out['headers'] = {str(k)[:200]: str(v)[:2000] for k, v in list(hdr.items())[:30]}
+    else:
+        cmd = str(cfg.get('command') or '').strip()
+        if Path(cmd).name.lower() not in MCP_COMMANDS:
+            raise ApiError(400, 'Command not allowed. Use npx, uvx, python, node, docker, deno, bunx, uv, or pipx.')
+        args = cfg.get('args') or []
+        if not isinstance(args, list) or len(args) > 40: raise ApiError(400, 'args must be a list of at most 40 items.')
+        out['command'] = cmd[:200]; out['args'] = [str(a)[:1000] for a in args]
+        env = cfg.get('env')
+        if env is not None:
+            if not isinstance(env, dict): raise ApiError(400, 'env must be an object')
+            out['env'] = {str(k)[:100]: str(v)[:4000] for k, v in list(env.items())[:40]}
+    with mcp_file_lock:
+        try: data = json.loads(MCP_FILE.read_text('utf-8'))
+        except (OSError, ValueError): data = {}
+        if not isinstance(data, dict): data = {}
+        servers = data.get('mcpServers')
+        if not isinstance(servers, dict): servers = {}
+        if name in servers: raise ApiError(409, f'Server "{name}" already exists in mcp.json.')
+        servers[name] = out; data['mcpServers'] = servers
+        MCP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = MCP_FILE.with_name(MCP_FILE.name + '.tmp')
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), 'utf-8')
+        os.replace(tmp, MCP_FILE)
+    c = mcp_clients.pop(name, None)
+    if c: c.close()
+    return name, out
+
 MIME = {'.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
         '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon'}
 PAGES = {'index.html', 'app.html', 'models.html', 'login.html'}       # root pages that may be accessed
@@ -414,6 +504,11 @@ class Handler(BaseHTTPRequestHandler):
             if route == 'servers' and m == 'GET':
                 return self.send_json(200, {'configured': MCP_FILE.exists(), 'file': str(MCP_FILE), 'servers': [
                     {'name': n, 'type': 'http' if c.get('url') else 'stdio', 'ready': bool(mcp_clients.get(n) and mcp_clients[n].ready)} for n, c in mcp_config().items()]})
+            if route == 'registry' and m == 'POST':
+                return self.send_json(200, {'servers': mcp_registry(body.get('q'))})
+            if route == 'add' and m == 'POST':
+                name, cfg = mcp_add(body)
+                return self.send_json(200, {'ok': True, 'name': name, 'config': cfg})
             if route == 'tools' and m == 'POST':
                 tools = mcp_get(str(body.get('server', ''))).list_tools()
                 return self.send_json(200, {'tools': [{'name': t.get('name'), 'description': t.get('description', ''), 'inputSchema': t.get('inputSchema')} for t in tools]})

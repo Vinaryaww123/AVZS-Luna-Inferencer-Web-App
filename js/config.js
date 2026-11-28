@@ -23,6 +23,7 @@ const P={
   cerebras:{n:'Cerebras',url:'https://api.cerebras.ai/v1',t:'oa',k:1},
   custom:{n:'Custom (OpenAI-compatible)',url:'',t:'oa',k:1}, // set your own URL in Settings
   /* --- Local --- */
+  inapp:{n:'In-app (wllama, GGUF)',url:'',t:'ll',loc:1}, // runs GGUF models directly in this app; see js/local.js
   ollama:{n:'Ollama (local)',url:'http://localhost:11434/v1',t:'oa',loc:1},
   lmstudio:{n:'LM Studio (local)',url:'http://localhost:1234/v1',t:'oa',loc:1},
   unsloth:{n:'Unsloth (local)',url:'http://localhost:8888/v1',t:'oa',loc:1},
@@ -44,7 +45,8 @@ const CH=ALL.filter(p=>P[p].t!='a1'); // providers that can chat
 const M={
   chat:{n:'Chat',ps:CH,ph:'Write a message…'},
   coder:{n:'Coder',ps:CH,ph:'Paste code or describe a programming task… (Shift+Enter for a new line)'},
-  multimodal:{n:'Multimodal',ps:CH,ph:'Ask something about the attached image…'}, // use a model that supports vision
+  agent:{n:'Agent',ps:CH,ph:'Give the agent a goal. It can plan, use MCP tools, and report back…'},
+  multimodal:{n:'Multimodal',ps:CH.filter(p=>p!='inapp'),ph:'Ask something about the attached image…'}, // use a model that supports vision
   research:{n:'Research',ps:CH,ph:'Research topic or question…'},
   image:{n:'Image',ps:['openai','google','together','xai','a1111','localai','ollama','lmstudio','unsloth','custom'],ph:'Describe an image…'},
   video:{n:'Video',ps:['openai','google'],ph:'Describe a video…'}
@@ -52,6 +54,10 @@ const M={
 
 /* Default model per mode+provider (can be changed in the model field, or via .env: LUNA_DEFAULT_<MODE>=provider:model) */
 const DM={
+  chat:{inapp:'qwen2.5-1.5b'},
+  coder:{inapp:'qwen2.5-coder-1.5b'},
+  agent:{inapp:'qwen2.5-1.5b'},
+  research:{inapp:'qwen2.5-1.5b'},
   image:{openai:'gpt-image-1',google:'gemini-2.5-flash-image',together:'black-forest-labs/FLUX.1-schnell',xai:'grok-2-image',a1111:'default'}, // a1111: checkpoint is set on the server
   video:{openai:'sora-2',google:'veo-3.0-generate-001'}
 };
@@ -59,9 +65,15 @@ const DM={
 /* Extra options above the input field for each mode (HTML + Tailwind classes) */
 /* MCP tools checkbox (Chat and Coder tabs). Servers and tools are configured in Settings > MCP. */
 const MCP_OPT='<label class="flex items-center gap-1.5" title="Allow the model to use tools from MCP servers (configure in Settings > MCP)"><input type="checkbox" id="mcpOn" class="accent-ac"> MCP tools<span id="mcpN" class="text-xs"></span></label>';
+/* Agent tab: the model works in steps and may call MCP tools. The base prompt is added to the system prompt. */
+const AGENT={
+  base:'You are an autonomous agent inside AVZS Luna Inferencer. Work step by step toward the user\'s goal. Use the available tools when they help, inspect the results, and decide the next action. Do not invent tool results. If a tool fails, explain it and try a reasonable alternative. When you have enough information, give a clear final answer. Answer in the language the user uses.',
+  steps:[['4','4 steps'],['8','8 steps'],['12','12 steps'],['20','20 steps']]
+};
 const OPT={
   multimodal:'<label class="filebtn" title="Choose an image, or paste it with Ctrl+V in the message field"><svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>Attach image<input type="file" id="files" accept="image/*" multiple class="sr-only"></label><div id="thumbs" class="flex flex-wrap gap-2"></div><input type="text" id="sys" placeholder="System prompt (optional)" class="field min-w-[180px] flex-1 border-transparent bg-cd py-1 text-sm">',
   chat:MCP_OPT+'<input type="text" id="sys" placeholder="System prompt (optional)" class="field min-w-[180px] flex-1 border-transparent bg-cd py-1 text-sm">',
+  agent:MCP_OPT+`<select id="agentSteps" class="field text-sm" aria-label="Maximum agent steps" title="Maximum number of tool-use rounds">${AGENT.steps.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`+'<input type="text" id="sys" placeholder="Agent instructions (optional)" class="field min-w-[180px] flex-1 border-transparent bg-cd py-1 text-sm">',
   research:'<label class="flex items-center gap-1.5"><input type="checkbox" id="web" class="accent-ac"> Use web search (Anthropic and Google)</label>',
   image:'', // replaced by the advanced settings panel (GEN)
   video:''
@@ -148,15 +160,18 @@ const EMPTY={
   coder:'Programming assistant: write, explain, find bugs, refactor, or review code. Choose a task and language below, attach code files if needed, then write your request.',
   multimodal:'Attach one or more images and ask a question. Choose a model that supports images (vision), e.g. GPT-4o, Claude, Gemini, or llava on Ollama.',
   chat:'Start a conversation with the model of your choice.',
+  agent:'Give the agent a goal. Enable MCP tools to let it read files, search, or use other servers; otherwise it answers in one step. Choose the maximum number of steps above the message field.',
   research:'Enter a topic. The model will break it into sub-questions, investigate them one by one, then write a report.',
   image:'Write a description of the image you want.',
   video:'Write a description of the video. The process may take several minutes.'
 };
 
-/* Storage (localStorage): k = API keys, u = custom URLs, m = last provider+model per mode */
-let S=JSON.parse(localStorage.getItem(LS)||'{}');S.k=S.k||{};S.u=S.u||{};S.m=S.m||{};S.gen=S.gen||{};
+/* Storage (localStorage): k = API keys, u = custom URLs, m = last provider+model per mode,
+   gen = image/video settings, theme = appearance (default leaves the current look unchanged),
+   local = in-app runtime settings (see js/local.js), ag = agent step limit. */
+let S=JSON.parse(localStorage.getItem(LS)||'{}');S.k=S.k||{};S.u=S.u||{};S.m=S.m||{};S.gen=S.gen||{};S.theme=S.theme||{mode:'system',effect:'none'};S.local=S.local||{};S.ag=S.ag||{};
 const save=()=>{localStorage.setItem(LS,JSON.stringify(S));if(typeof syncUp=="function")syncUp()}; // syncUp: js/auth.js
-let mode='chat',busy=null;const H={chat:[],coder:[],multimodal:[]}; // conversation history per mode
+let mode='chat',busy=null;const H={chat:[],coder:[],agent:[],multimodal:[]}; // conversation history per mode
 
 /* ===== HELPERS ===== */
 const ENV=window.ENV||{}; // from js/env.js (built from .env)

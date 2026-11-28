@@ -11,3 +11,5 @@ dist-desktop/
 .venv*/
 # Local backup copy, not part of the deployed app
 avzs-luna-inferencer/
+# Browser test artifacts
+.playwright-mcp/

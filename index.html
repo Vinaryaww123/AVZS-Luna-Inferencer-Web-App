@@ -6,6 +6,10 @@
 <title>AVZS Luna Inferencer</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/app.css">
+<script>
+/* Apply a saved color mode/accent before the first paint (default is untouched). */
+try{const t=(JSON.parse(localStorage.getItem('studio-ai.v1')||'{}').theme||{});if(t.mode==='light'||t.mode==='dark')document.documentElement.dataset.theme=t.mode;if(t.accent){document.documentElement.style.setProperty('--ac',t.accent);const n=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(t.accent);if(n){const r=parseInt(n[1],16),g=parseInt(n[2],16),b=parseInt(n[3],16);document.documentElement.style.setProperty('--on',(0.299*r+0.587*g+0.114*b)>150?'#0b1020':'#fff')}}}catch(e){}
+</script>
 </head>
 <body class="min-h-dvh bg-bg font-sans text-[15px] leading-relaxed text-tx">
 <div class="mx-auto max-w-4xl px-4 pb-10">
@@ -25,10 +29,15 @@
   <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
     <div class="card"><h3 class="font-semibold">Chat</h3><p class="mt-1 text-sm text-mu">Streaming conversations with cloud or local models, complete with a system prompt.</p></div>
     <div class="card"><h3 class="font-semibold">Coder</h3><p class="mt-1 text-sm text-mu">A programming assistant: write, explain, debug, refactor, and review code, with copyable and previewable code blocks.</p></div>
+    <div class="card"><h3 class="font-semibold">Agent</h3><p class="mt-1 text-sm text-mu">Give a goal instead of a prompt. The agent plans, calls MCP tools step by step, and reports back with a configurable step limit.</p></div>
     <div class="card"><h3 class="font-semibold">Multimodal</h3><p class="mt-1 text-sm text-mu">Attach images and ask vision models about their contents.</p></div>
     <div class="card"><h3 class="font-semibold">Research</h3><p class="mt-1 text-sm text-mu">Break a topic into sub-questions, investigate them one by one, then compile a report. Optional web search.</p></div>
     <div class="card"><h3 class="font-semibold">Image</h3><p class="mt-1 text-sm text-mu">Generate images with OpenAI, Gemini, xAI, Together, or local Stable Diffusion.</p></div>
     <div class="card"><h3 class="font-semibold">Video</h3><p class="mt-1 text-sm text-mu">Generate videos with Sora or Veo, including status monitoring.</p></div>
+    <div class="card"><h3 class="font-semibold">In-app GGUF runtime</h3><p class="mt-1 text-sm text-mu">Run small GGUF models directly in the app with wllama. No Ollama or server needed; advanced KV cache, batch, context, and GPU settings included.</p><a href="app.html" class="mt-2 inline-block text-sm text-ac hover:underline">Open the app</a></div>
+    <div class="card"><h3 class="font-semibold">Sessions and context</h3><p class="mt-1 text-sm text-mu">Keep separate local sessions per tab, reopen old conversations, inspect the context window, and trim messages before sending.</p></div>
+    <div class="card"><h3 class="font-semibold">Themes and effects</h3><p class="mt-1 text-sm text-mu">Light, dark, or system mode, custom accent colors, and optional animated backgrounds. The default look stays exactly as it was.</p></div>
+    <div class="card"><h3 class="font-semibold">MCP finder</h3><p class="mt-1 text-sm text-mu">Search the official Model Context Protocol registry and add servers with one click, including required environment variables.</p></div>
     <div class="card"><h3 class="font-semibold">Local models</h3><p class="mt-1 text-sm text-mu">View your PC specifications, get recommendations for models that fit, and search Hugging Face from here.</p><a href="models.html" class="mt-2 inline-block text-sm text-ac hover:underline">Open Local Models</a></div>
     <div class="card"><h3 class="font-semibold">Cloud and local</h3><p class="mt-1 text-sm text-mu">API keys in the browser or a .env file. Local models through Ollama, LM Studio, llama.cpp, and more.</p></div>
   </section>
@@ -44,6 +53,7 @@
 <script src="js/brand.js"></script>
 <script src="js/env.js"></script>
 <script src="js/config.js"></script>
+<script src="js/theme.js"></script>
 <script>
 for(const v of Object.values(P)){const s=document.createElement('span');s.className='chip';s.textContent=v.n.replace(' (local)','');$(v.loc?'#local':'#cloud').append(s)}
 </script>
